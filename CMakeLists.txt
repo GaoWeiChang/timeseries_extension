@@ -40,12 +40,18 @@ execute_process(
 # warning flag
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 
+# debug
+set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -fno-omit-frame-pointer")
+
+
 # ===============================================
 # กำหนด Source Files
 # ===============================================
 
 set(SOURCES
     src/init.c
+    src/utils.c
 )
 
 # ===============================================
