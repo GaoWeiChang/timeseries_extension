@@ -102,10 +102,10 @@ metadata_insert_dimension(int hypertable_id,
 
     initStringInfo(&query);
     appendStringInfo(&query,
-        "INSERT INTO _timeseries_catalog.dimension "
-        "(hypertable_id, column_name, column_type, interval_length) "
-        "VALUES (%d, '%s', '%s', " INT64_FORMAT ")",
-        hypertable_id, column_name, type_name, interval_microseconds);
+                    "INSERT INTO _timeseries_catalog.dimension "
+                    "(hypertable_id, column_name, column_type, interval_length) "
+                    "VALUES (%d, '%s', '%s', " INT64_FORMAT ")",
+                    hypertable_id, column_name, type_name, interval_microseconds);
     
     SPI_connect();
     SPI_execute(query.data, false, 0);

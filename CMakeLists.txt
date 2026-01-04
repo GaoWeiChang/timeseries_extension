@@ -53,6 +53,7 @@ set(SOURCES
     src/init.c
     src/utils.c
     src/metadata.c
+    src/hypertable.c
 )
 
 # ===============================================

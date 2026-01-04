@@ -10,7 +10,7 @@ LANGUAGE C STRICT;
 COMMENT ON FUNCTION get_current_timestamp_seconds() IS 'Get current timestamp in seconds since epoch';
 
 -- ==========================================
--- METADATA SCHEMA
+-- metadata.c
 -- ==========================================
 
 CREATE SCHEMA _timeseries_catalog;
@@ -135,4 +135,18 @@ CREATE FUNCTION test_find_chunk(
 )
 RETURNS integer
 AS 'MODULE_PATHNAME', 'test_find_chunk'
+LANGUAGE C STRICT;
+
+-- ==========================================
+-- hypertable.c
+-- ==========================================
+
+-- create hypertable
+CREATE FUNCTION create_hypertable(
+    table_name REGCLASS,
+    time_column_name TEXT,
+    chunk_time_interval INTERVAL
+)
+RETURNS VOID
+AS 'MODULE_PATHNAME', 'create_hypertable'
 LANGUAGE C STRICT;
