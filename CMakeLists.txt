@@ -52,6 +52,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -fno-omit-frame-pointer")
 set(SOURCES
     src/init.c
     src/utils.c
+    src/metadata.c
 )
 
 # ===============================================

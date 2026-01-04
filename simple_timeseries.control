@@ -1,5 +1,0 @@
-comment = 'Simple time-series extension'
-default_version = '1.0'
-module_pathname = '$libdir/simple_timeseries'
-relocatable = false
-schema = public
