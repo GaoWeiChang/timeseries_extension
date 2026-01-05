@@ -193,3 +193,40 @@ create_hypertable(PG_FUNCTION_ARGS)
     
     PG_RETURN_VOID();
 }
+
+/*
+ * Remove hypertable
+ * 
+ * drop_hypertable(
+ *      table_name REGCLASS,
+ * ) RETURNS VOID
+ * 
+ */
+PG_FUNCTION_INFO_V1(drop_hypertable);
+Datum
+drop_hypertable(PG_FUNCTION_ARGS)
+{
+    Oid table_oid;
+    Relation rel;
+    char *schema_name;
+    char *table_name;
+
+    table_oid = PG_GETARG_OID(0);
+
+    rel = table_open(table_oid, AccessExclusiveLock);
+    schema_name = get_namespace_name(RelationGetNamespace(rel));
+    table_name = pstrdup(RelationGetRelationName(rel)); 
+    if(!metadata_is_hypertable(schema_name, table_name)){
+        ereport(WARNING,
+                (errmsg("\"%s.%s\" is not a hypertable", schema_name, table_name)));
+    }
+
+    metadata_delete_hypertable(schema_name, table_name);
+    
+    /* insert trigger later */
+
+    table_close(rel, AccessExclusiveLock);
+    elog(NOTICE, "✅ Successfully dropped hypertable \"%s.%s\"", schema_name, table_name);
+
+    PG_RETURN_VOID();
+}

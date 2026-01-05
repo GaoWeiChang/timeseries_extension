@@ -7,6 +7,7 @@
 extern bool metadata_is_hypertable(const char *schema_name, const char *table_name);
 extern int metadata_insert_hypertable(const char *schema_name, const char *table_name);
 extern int metadata_get_hypertable_id(const char *schema_name, const char *table_name);
+extern void metadata_delete_hypertable(const char *schema_name, const char *table_name);
 
 extern void metadata_insert_dimension(int hypertable_id,
                                     const char *column_name,

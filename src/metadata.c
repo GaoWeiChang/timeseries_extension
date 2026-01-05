@@ -44,8 +44,8 @@ metadata_insert_hypertable(const char *schema_name, const char *table_name)
     initStringInfo(&query);
     appendStringInfo(&query,
         "INSERT INTO _timeseries_catalog.hypertable (schema_name, table_name) "
-        "VALUES ('%s', '%s') RETURNING id",
-        schema_name, table_name);
+        "VALUES (%s, %s) RETURNING id",
+        quote_literal_cstr(schema_name), quote_literal_cstr(table_name));
     
     SPI_connect();
     SPI_execute(query.data, false, 0);
@@ -85,6 +85,31 @@ metadata_get_hypertable_id(const char *schema_name, const char *table_name)
     SPI_finish();
 
     return hypertable_id;
+}
+
+/*
+ * Delete hypertable metadata.
+ * 
+ */
+void 
+metadata_delete_hypertable(const char *schema_name, const char *table_name)
+{
+    StringInfoData query;
+    initStringInfo(&query);
+    appendStringInfo(&query,
+        "DELETE FROM _timeseries_catalog.hypertable "
+        "WHERE schema_name=%s AND table_name=%s",
+        quote_literal_cstr(schema_name), quote_literal_cstr(table_name));
+    
+    SPI_connect();
+    int ret = SPI_execute(query.data, false, 0);
+    if(ret != SPI_OK_DELETE){
+        ereport(ERROR,
+                (errcode(ERRCODE_INTERNAL_ERROR),
+                 errmsg("Failed to delete hypertable %s", table_name)));
+    }
+    
+    SPI_finish();
 }
 
 /*

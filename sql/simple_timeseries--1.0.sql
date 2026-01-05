@@ -150,3 +150,11 @@ CREATE FUNCTION create_hypertable(
 RETURNS VOID
 AS 'MODULE_PATHNAME', 'create_hypertable'
 LANGUAGE C STRICT;
+
+-- drop hypertable
+CREATE FUNCTION drop_hypertable(
+    table_name REGCLASS
+)
+RETURNS VOID
+AS 'MODULE_PATHNAME', 'drop_hypertable'
+LANGUAGE C STRICT;
