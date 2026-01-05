@@ -273,61 +273,6 @@ test_create_hypertable_metadata(PG_FUNCTION_ARGS)
     PG_RETURN_INT32(hypertable_id);
 }
 
-PG_FUNCTION_INFO_V1(test_check_hypertable_exists);
-Datum 
-test_check_hypertable_exists(PG_FUNCTION_ARGS)
-{
-    char *schema_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
-    char *table_name = text_to_cstring(PG_GETARG_TEXT_PP(1));
-    
-    StringInfoData query;
-    initStringInfo(&query);
-    appendStringInfo(&query,
-        "SELECT 1 FROM _timeseries_catalog.hypertable "
-        "WHERE schema_name='%s' AND table_name='%s'",
-        schema_name, table_name);
-    
-    SPI_connect();
-    SPI_execute(query.data, true, 0);
-    bool exists = (SPI_processed > 0);
-    SPI_finish();
-    
-    PG_RETURN_BOOL(exists);
-}
-
-PG_FUNCTION_INFO_V1(test_get_hypertable_info);
-Datum 
-test_get_hypertable_info(PG_FUNCTION_ARGS)
-{
-    char *schema_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
-    char *table_name = text_to_cstring(PG_GETARG_TEXT_PP(1));
-    
-    StringInfoData query;
-    initStringInfo(&query);
-    appendStringInfo(&query,
-        "SELECT id FROM _timeseries_catalog.hypertable "
-        "WHERE schema_name='%s' AND table_name='%s'",
-        schema_name, table_name);
-    
-    SPI_connect();
-    SPI_execute(query.data, true, 0);
-    
-    char result[256];
-    if (SPI_processed > 0)
-    {
-        bool isnull;
-        int id = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
-        snprintf(result, sizeof(result), "Hypertable ID: %d", id);
-    }
-    else
-    {
-        snprintf(result, sizeof(result), "Hypertable not found");
-    }
-    
-    SPI_finish();
-    PG_RETURN_TEXT_P(cstring_to_text(result));
-}
-
 PG_FUNCTION_INFO_V1(test_create_chunk_metadata);
 Datum
 test_create_chunk_metadata(PG_FUNCTION_ARGS)

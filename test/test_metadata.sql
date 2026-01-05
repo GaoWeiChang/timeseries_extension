@@ -26,14 +26,14 @@ SELECT test_create_hypertable_metadata(
 \echo 'Test 2: Check if Hypertable Exists';
 \echo '==========================================';
 
-SELECT test_check_hypertable_exists('public', 'metrics');
-SELECT test_check_hypertable_exists('public', 'nonexistent');
+SELECT check_hypertable_exists('public', 'metrics');
+SELECT check_hypertable_exists('public', 'nonexistent');
 
 \echo '';
 \echo 'Test 3: Get Hypertable Info';
 \echo '==========================================';
 
-SELECT test_get_hypertable_info('public', 'metrics');
+SELECT get_hypertable_info('public', 'metrics');
 
 \echo '';
 \echo 'Test 4: View Metadata Tables Directly';
@@ -41,7 +41,7 @@ SELECT test_get_hypertable_info('public', 'metrics');
 
 SELECT * FROM _timeseries_catalog.hypertable;
 SELECT * FROM _timeseries_catalog.dimension;
-SELECT * FROM _timeseries_catalog.hypertables;
+SELECT * FROM _timeseries_catalog.chunk;
 
 \echo '';
 \echo '==========================================';

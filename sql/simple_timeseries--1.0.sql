@@ -82,6 +82,54 @@ LEFT JOIN _timeseries_catalog.dimension d ON h.id = d.hypertable_id
 LEFT JOIN _timeseries_catalog.chunk c ON h.id = c.hypertable_id
 GROUP BY h.id, h.schema_name, h.table_name, d.column_name, d.interval_length, h.created_at;
 
+
+-- ==========================================
+-- FUNCTION
+-- ==========================================
+
+-- check whether hypertable exists
+CREATE FUNCTION check_hypertable_exists(
+    schema_name text,
+    table_name text
+) RETURNS boolean 
+AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT *
+        FROM _timeseries_catalog.hypertable h
+        WHERE h.schema_name = check_hypertable_exists.schema_name 
+            AND h.table_name = check_hypertable_exists.table_name
+    );
+END;
+$$ 
+LANGUAGE plpgsql;
+
+
+-- get hypertable info
+CREATE FUNCTION get_hypertable_info(
+    s_name text,
+    t_name text
+) RETURNS text 
+AS $$
+DECLARE
+    info_text text;
+BEGIN
+    SELECT format(
+        'ID: %s | Schema: %s | Table: %s | Time Column: %s | Interval: %s | Chunks: %s | Created: %s',
+        id, schema_name, table_name, time_column, interval_length, num_chunks, created_at) INTO info_text
+    FROM _timeseries_catalog.hypertables
+    WHERE schema_name = s_name AND table_name = t_name;
+
+    IF info_text IS NULL THEN
+        RETURN format('Hypertable %s.%s not found', s_name, t_name);
+    END IF;
+
+    RETURN info_text;
+END;
+$$ 
+LANGUAGE plpgsql;
+
+
 -- ==========================================
 -- Test function for metadata system
 -- ==========================================
@@ -93,27 +141,8 @@ CREATE FUNCTION test_create_hypertable_metadata(
     time_column_name text,
     time_column_type regtype,
     interval_microseconds bigint
-)
-RETURNS integer
+) RETURNS integer
 AS 'MODULE_PATHNAME', 'test_create_hypertable_metadata'
-LANGUAGE C STRICT;
-
--- test check hypertable
-CREATE FUNCTION test_check_hypertable_exists(
-    schema_name text,
-    table_name text
-)
-RETURNS boolean
-AS 'MODULE_PATHNAME', 'test_check_hypertable_exists'
-LANGUAGE C STRICT;
-
--- test get hypertable info
-CREATE FUNCTION test_get_hypertable_info(
-    schema_name text,
-    table_name text
-)
-RETURNS text
-AS 'MODULE_PATHNAME', 'test_get_hypertable_info'
 LANGUAGE C STRICT;
 
 -- test create chunk
@@ -123,8 +152,7 @@ CREATE FUNCTION test_create_chunk_metadata(
     table_name text,
     start_time bigint,
     end_time bigint
-)
-RETURNS integer
+) RETURNS integer
 AS 'MODULE_PATHNAME', 'test_create_chunk_metadata'
 LANGUAGE C STRICT;
 
@@ -132,8 +160,7 @@ LANGUAGE C STRICT;
 CREATE FUNCTION test_find_chunk(
     hypertable_id integer,
     time_microseconds bigint
-)
-RETURNS integer
+) RETURNS integer
 AS 'MODULE_PATHNAME', 'test_find_chunk'
 LANGUAGE C STRICT;
 
@@ -146,15 +173,13 @@ CREATE FUNCTION create_hypertable(
     table_name REGCLASS,
     time_column_name TEXT,
     chunk_time_interval INTERVAL
-)
-RETURNS VOID
+) RETURNS VOID
 AS 'MODULE_PATHNAME', 'create_hypertable'
 LANGUAGE C STRICT;
 
 -- drop hypertable
 CREATE FUNCTION drop_hypertable(
     table_name REGCLASS
-)
-RETURNS VOID
+) RETURNS VOID
 AS 'MODULE_PATHNAME', 'drop_hypertable'
 LANGUAGE C STRICT;
