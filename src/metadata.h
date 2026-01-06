@@ -20,4 +20,5 @@ extern int metadata_insert_chunk(int hypertable_id,
                                 const char *table_name,
                                 int64 start_time,
                                 int64 end_time);
+
 extern int metadata_find_chunk(int hypertable_id, int64 time_microseconds);

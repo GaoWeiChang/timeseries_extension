@@ -54,6 +54,7 @@ set(SOURCES
     src/utils.c
     src/metadata.c
     src/hypertable.c
+    src/chunk.c
 )
 
 # ===============================================

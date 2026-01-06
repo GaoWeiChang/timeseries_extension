@@ -183,3 +183,44 @@ CREATE FUNCTION drop_hypertable(
 ) RETURNS VOID
 AS 'MODULE_PATHNAME', 'drop_hypertable'
 LANGUAGE C STRICT;
+
+-- ==========================================
+-- CHUNK MANAGEMENT FUNCTIONS
+-- ==========================================
+
+-- build chunk
+CREATE FUNCTION test_create_chunk(
+    hypertable_id INTEGER,
+    time_value TIMESTAMPTZ
+)
+RETURNS INTEGER
+AS 'MODULE_PATHNAME', 'test_create_chunk'
+LANGUAGE C STRICT;
+
+COMMENT ON FUNCTION test_create_chunk(INTEGER, TIMESTAMPTZ) IS 
+    'Create a chunk for the given timestamp (for testing)';
+
+-- find chunk for timestamp
+CREATE FUNCTION test_find_chunk_for_time(
+    hypertable_id INTEGER,
+    time_value TIMESTAMPTZ
+)
+RETURNS INTEGER
+AS 'MODULE_PATHNAME', 'test_find_chunk_for_time'
+LANGUAGE C STRICT;
+
+COMMENT ON FUNCTION test_find_chunk_for_time(INTEGER, TIMESTAMPTZ) IS 
+    'Find chunk that covers the given timestamp';
+
+-- find or build chunk
+CREATE FUNCTION test_get_or_create_chunk(
+    hypertable_id INTEGER,
+    time_value TIMESTAMPTZ
+)
+RETURNS INTEGER
+AS 'MODULE_PATHNAME', 'test_get_or_create_chunk'
+LANGUAGE C STRICT;
+
+COMMENT ON FUNCTION test_get_or_create_chunk(INTEGER, TIMESTAMPTZ) IS 
+    'Get existing chunk or create new one for the given timestamp';
+    

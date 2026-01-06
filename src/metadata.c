@@ -213,7 +213,7 @@ int
 metadata_find_chunk(int hypertable_id, int64 time_microseconds)
 {
     StringInfoData query;
-    int chunk_id;
+    int chunk_id = -1;
 
     initStringInfo(&query);
     appendStringInfo(&query,
@@ -225,7 +225,7 @@ metadata_find_chunk(int hypertable_id, int64 time_microseconds)
     SPI_execute(query.data, true, 0);
     if (SPI_processed > 0){
         bool isnull;
-        chunk_id = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+        chunk_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     }
     SPI_finish();
 

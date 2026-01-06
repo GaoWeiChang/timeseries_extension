@@ -58,14 +58,11 @@ find_time_column(Relation rel, const char *time_column_name)
     }
 
     if(time_attnum == InvalidAttrNumber){
-        ereport(ERROR,
-                (errcode(ERRCODE_UNDEFINED_COLUMN),
-                errmsg("column \"%s\" does not exist", time_column_name)));
+        ereport(ERROR, errmsg("column \"%s\" does not exist", time_column_name));
     }
 
     if(!time_attr->attnotnull){
-        ereport(WARNING,
-                (errmsg("time column \"%s\" should be NOT NULL", time_column_name)));
+        ereport(WARNING, (errmsg("time column \"%s\" should be NOT NULL", time_column_name)));
     }
 
     return time_attnum;
@@ -108,9 +105,7 @@ validate_table_for_hypertable(Relation rel)
     char *schema_name = get_namespace_name(RelationGetNamespace(rel));
     char *table_name = RelationGetRelationName(rel);
     if(metadata_is_hypertable(schema_name, table_name)){
-        ereport(ERROR,
-            (errcode(ERRCODE_DUPLICATE_OBJECT),
-            errmsg("\"%s.%s\" is already a hypertable", schema_name, table_name)));
+        ereport(ERROR, errmsg("\"%s.%s\" is already a hypertable", schema_name, table_name));
     }
 }
 
@@ -217,8 +212,7 @@ drop_hypertable(PG_FUNCTION_ARGS)
     schema_name = get_namespace_name(RelationGetNamespace(rel));
     table_name = pstrdup(RelationGetRelationName(rel)); 
     if(!metadata_is_hypertable(schema_name, table_name)){
-        ereport(WARNING,
-                (errmsg("\"%s.%s\" is not a hypertable", schema_name, table_name)));
+        ereport(WARNING, (errmsg("\"%s.%s\" is not a hypertable", schema_name, table_name)));
     }
 
     metadata_delete_hypertable(schema_name, table_name);
