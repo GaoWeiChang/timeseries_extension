@@ -130,6 +130,41 @@ $$
 LANGUAGE plpgsql;
 
 
+-- display chunk by hypertable id
+CREATE FUNCTION get_chunks_by_hid(
+    p_hypertable_id int
+) RETURNS TABLE (table_name text, start_time timestamptz, end_time timestamptz)
+AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT 
+        c.table_name,
+        TO_TIMESTAMP((c.start_time::double precision / 1000000) + 946684800) as start_time,
+        TO_TIMESTAMP((c.end_time::double precision / 1000000) + 946684800) as end_time
+    FROM _timeseries_catalog.chunk c
+    WHERE c.hypertable_id = p_hypertable_id
+    ORDER BY c.start_time;
+END;
+$$ 
+LANGUAGE plpgsql;
+
+
+-- display all chunks
+CREATE FUNCTION display_all_chunks(
+) RETURNS TABLE (schema_name name, table_name name)
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        pg.schemaname as schema_name,
+        pg.tablename as table_name
+    FROM pg_tables as pg
+    WHERE pg.tablename LIKE '_hyper_%'
+    ORDER BY pg.tablename;
+END;
+$$ 
+LANGUAGE plpgsql;
+
 -- ==========================================
 -- Test function for metadata system
 -- ==========================================
