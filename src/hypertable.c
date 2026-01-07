@@ -10,6 +10,7 @@
 #include <utils/timestamp.h>
 
 #include "metadata.h"
+#include "trigger.h"
 
 #define USECS_PER_DAY INT64CONST(86400000000)
 #define USECS_PER_HOUR INT64CONST(3600000000)
@@ -180,7 +181,7 @@ create_hypertable(PG_FUNCTION_ARGS)
                               interval_us);
     elog(NOTICE, "Added time dimension on column \"%s\"", time_column_name);
 
-    /* insert trigger later */
+    trigger_create_on_hypertable(schema_name, table_name);
 
     // close table
     table_close(rel, AccessExclusiveLock);
@@ -215,9 +216,8 @@ drop_hypertable(PG_FUNCTION_ARGS)
         ereport(WARNING, (errmsg("\"%s.%s\" is not a hypertable", schema_name, table_name)));
     }
 
-    metadata_delete_hypertable(schema_name, table_name);
-    
-    /* insert trigger later */
+    metadata_drop_hypertable(schema_name, table_name);
+    trigger_drop_on_hypertable(schema_name, table_name);
 
     table_close(rel, AccessExclusiveLock);
     elog(NOTICE, "✅ Successfully dropped hypertable \"%s.%s\"", schema_name, table_name);

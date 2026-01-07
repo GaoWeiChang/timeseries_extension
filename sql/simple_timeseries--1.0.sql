@@ -258,4 +258,14 @@ LANGUAGE C STRICT;
 
 COMMENT ON FUNCTION test_get_or_create_chunk(INTEGER, TIMESTAMPTZ) IS 
     'Get existing chunk or create new one for the given timestamp';
-    
+
+-- ==========================================
+-- TRIGGER FUNCTIONS
+-- ==========================================
+CREATE FUNCTION hypertable_insert_trigger()
+RETURNS TRIGGER
+AS 'MODULE_PATHNAME', 'hypertable_insert_trigger'
+LANGUAGE C;
+
+COMMENT ON FUNCTION hypertable_insert_trigger() IS 
+    'Trigger function that routes INSERT to appropriate chunk';

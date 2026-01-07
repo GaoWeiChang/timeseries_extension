@@ -55,6 +55,7 @@ set(SOURCES
     src/metadata.c
     src/hypertable.c
     src/chunk.c
+    src/trigger.c
 )
 
 # ===============================================

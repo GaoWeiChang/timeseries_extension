@@ -42,7 +42,7 @@ chunk_get_next_number(int hypertable_id)
     }
     
     bool isnull;
-    chunk_number = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+    chunk_number = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     
     SPI_finish();
     

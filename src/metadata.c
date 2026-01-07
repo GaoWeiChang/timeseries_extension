@@ -53,7 +53,7 @@ metadata_insert_hypertable(const char *schema_name, const char *table_name)
         ereport(ERROR,
                 (errmsg("failed to insert hypertable metadata")));
     }
-    hypertable_id = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+    hypertable_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     SPI_finish();
 
     return hypertable_id;
@@ -80,7 +80,7 @@ metadata_get_hypertable_id(const char *schema_name, const char *table_name)
     SPI_execute(query.data, true, 0);
     if (SPI_processed > 0){
         bool isnull;
-        hypertable_id = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+        hypertable_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     }
     SPI_finish();
 
@@ -92,7 +92,7 @@ metadata_get_hypertable_id(const char *schema_name, const char *table_name)
  * 
  */
 void 
-metadata_delete_hypertable(const char *schema_name, const char *table_name)
+metadata_drop_hypertable(const char *schema_name, const char *table_name)
 {
     StringInfoData query;
     initStringInfo(&query);
@@ -162,7 +162,7 @@ metadata_get_chunk_interval(int hypertable_id)
     SPI_execute(query.data, true, 0);
     if (SPI_processed > 0){
         bool isnull;
-        interval = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+        interval = DatumGetInt64(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     }
     SPI_finish();
     
@@ -198,7 +198,7 @@ metadata_insert_chunk(int hypertable_id,
         ereport(ERROR,
                 (errmsg("failed to insert dimension metadata")));
     }
-    chunk_id = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+    chunk_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     SPI_finish();
 
     return chunk_id;
@@ -256,7 +256,7 @@ test_create_hypertable_metadata(PG_FUNCTION_ARGS)
     SPI_execute(query.data, false, 0);
     
     bool isnull;
-    int hypertable_id = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+    int hypertable_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     
     // Insert dimension 
     resetStringInfo(&query);
@@ -295,7 +295,7 @@ test_create_chunk_metadata(PG_FUNCTION_ARGS)
     SPI_execute(query.data, false, 0);
         
     bool isnull;
-    int chunk_id = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+    int chunk_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     
     SPI_finish();
     elog(NOTICE, "Created chunk: id=%d", chunk_id);
@@ -323,7 +323,7 @@ test_find_chunk(PG_FUNCTION_ARGS)
     if (SPI_processed > 0)
     {
         bool isnull;
-        chunk_id = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+        chunk_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     }
     
     SPI_finish();
