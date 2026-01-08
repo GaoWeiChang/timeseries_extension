@@ -70,12 +70,32 @@ get_chunk_info(int chunk_id, char **schema_name_out, char **table_name_out)
     appendStringInfo(&query,
                     "SELECT schema_name, table_name "
                     "FROM _timeseries_catalog.chunk "
-                    "WHERE id = %d", chunk_id);
+                    "WHERE id = %d;", chunk_id);
     
+    SPI_connect();
     
     ret = SPI_execute(query.data, true, 0);
-    if (ret != SPI_OK_SELECT || SPI_processed == 0){
+    elog(NOTICE, "ret: %d", ret);
+    elog(NOTICE, "ret code: %s", SPI_result_code_string(ret));
+
+    // if (ret < 0){
+    //     SPI_finish();
+    //     ereport(ERROR, errmsg("chunk with id %d not found", chunk_id));
+    // }
+
+    if (ret != SPI_OK_SELECT) {
+        SPI_finish();
+        ereport(ERROR, errmsg("SELECT failed with code %d", ret)); // segfault
+    }
+
+    if (SPI_processed == 0) {
+        SPI_finish();
         ereport(ERROR, errmsg("chunk with id %d not found", chunk_id));
+    }
+
+    if (SPI_tuptable == NULL || SPI_tuptable->vals[0] == NULL) {
+        SPI_finish();
+        ereport(ERROR, errmsg("unexpected NULL result"));
     }
 
     datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
@@ -83,6 +103,8 @@ get_chunk_info(int chunk_id, char **schema_name_out, char **table_name_out)
     
     datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
     *table_name_out = pstrdup(TextDatumGetCString(datum));
+
+    SPI_finish();
 }
 
 /*
@@ -213,13 +235,13 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     Datum datum;
     char *time_column_name;
 
+    SPI_connect();
     
     initStringInfo(&query);
     appendStringInfo(&query,
         "SELECT column_name FROM _timeseries_catalog.dimension "
         "WHERE hypertable_id = %d", hypertable_id);
         
-    SPI_connect();
     ret = SPI_execute(query.data, true, 0);
     if (ret != SPI_OK_SELECT || SPI_processed == 0){
         SPI_finish();
@@ -228,7 +250,7 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
 
     datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
     time_column_name = pstrdup(TextDatumGetCString(datum));
-    
+
     // find attribute number of time column
     TupleDesc tupdesc = RelationGetDescr(rel);
     time_attnum = InvalidAttrNumber;
@@ -250,23 +272,20 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     
     // fetch timestamp
     time_value = get_time_value_from_tuple(trigdata->tg_trigtuple, tupdesc, time_attnum);
-    
-    SPI_finish();
 
     chunk_id = chunk_get_or_create(hypertable_id, time_value);
-    elog(DEBUG1, "Using chunk_id: %d", chunk_id);
+    elog(NOTICE, "Using chunk_id: %d", chunk_id);
 
-    SPI_connect();
-
+    
     // fetch chunk
     get_chunk_info(chunk_id, &chunk_schema, &chunk_table);
     chunk_full_name = get_chunk_table_name(chunk_schema, chunk_table);
-    elog(DEBUG1, "Target chunk: %s", chunk_full_name);
-
-    // execute insert
+    elog(NOTICE, "Target chunk: %s", chunk_full_name);
+    
+    // insert to chunk table
     insert_query = build_insert_query(chunk_full_name, tupdesc, trigdata->tg_trigtuple);
-    elog(DEBUG1, "executing INSERT query...");
-
+    elog(NOTICE, "executing INSERT query...");
+    
     ret = SPI_execute(insert_query, false, 0);
     if (ret != SPI_OK_INSERT){
         SPI_finish();
@@ -308,8 +327,7 @@ trigger_create_on_hypertable(const char *schema_name, const char *table_name)
     int ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_UTILITY){
         SPI_finish();
-        ereport(ERROR, errmsg("failed to create insert trigger on \"%s.%s\"",
-                        schema_name, table_name));
+        ereport(ERROR, errmsg("failed to create insert trigger on \"%s.%s\"", schema_name, table_name));
     }
 
     SPI_finish();

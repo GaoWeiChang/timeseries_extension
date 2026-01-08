@@ -266,6 +266,3 @@ CREATE FUNCTION hypertable_insert_trigger()
 RETURNS TRIGGER
 AS 'MODULE_PATHNAME', 'hypertable_insert_trigger'
 LANGUAGE C;
-
-COMMENT ON FUNCTION hypertable_insert_trigger() IS 
-    'Trigger function that routes INSERT to appropriate chunk';
