@@ -52,7 +52,7 @@ CREATE TABLE test_intervals (
     val DOUBLE PRECISION
 );
 
-SELECT create_hypertable('test_intervals', 'time', INTERVAL '1 hour');
+SELECT create_hypertable('test_intervals', 'time_val', INTERVAL '1 hour');
 
 SELECT 
     h.table_name,
@@ -66,3 +66,5 @@ WHERE h.table_name = 'test_intervals';
 \echo ''
 \echo '✓ Test 8 passed'
 \echo ''
+
+SELECT drop_hypertable('schema_name.table_name');

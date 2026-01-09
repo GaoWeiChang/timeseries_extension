@@ -8,6 +8,7 @@
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
 #include <utils/timestamp.h>
+#include <executor/spi.h> 
 
 #include "metadata.h"
 #include "trigger.h"
@@ -146,6 +147,8 @@ create_hypertable(PG_FUNCTION_ARGS)
     rel = table_open(table_oid, AccessExclusiveLock);
     schema_name = get_namespace_name(RelationGetNamespace(rel));
     table_name = pstrdup(RelationGetRelationName(rel));
+
+    SPI_connect();
     validate_table_for_hypertable(rel);
 
     // check time column
@@ -180,12 +183,13 @@ create_hypertable(PG_FUNCTION_ARGS)
                               time_type,
                               interval_us);
     elog(NOTICE, "Added time dimension on column \"%s\"", time_column_name);
-
+    
     trigger_create_on_hypertable(schema_name, table_name);
-
+    
     // close table
     table_close(rel, AccessExclusiveLock);
     elog(NOTICE, "✅ Successfully converted \"%s.%s\" to hypertable", schema_name, table_name);
+    SPI_finish();
     
     PG_RETURN_VOID();
 }
@@ -212,15 +216,18 @@ drop_hypertable(PG_FUNCTION_ARGS)
     rel = table_open(table_oid, AccessExclusiveLock);
     schema_name = get_namespace_name(RelationGetNamespace(rel));
     table_name = pstrdup(RelationGetRelationName(rel)); 
+
+    SPI_connect();
     if(!metadata_is_hypertable(schema_name, table_name)){
         ereport(WARNING, (errmsg("\"%s.%s\" is not a hypertable", schema_name, table_name)));
     }
 
-    metadata_drop_hypertable(schema_name, table_name);
-    trigger_drop_on_hypertable(schema_name, table_name);
+    metadata_drop_hypertable(schema_name, table_name); // drop hypertable
+    trigger_drop_on_hypertable(schema_name, table_name); // drop trigger
 
     table_close(rel, AccessExclusiveLock);
     elog(NOTICE, "✅ Successfully dropped hypertable \"%s.%s\"", schema_name, table_name);
-
+    SPI_finish();
+    
     PG_RETURN_VOID();
 }

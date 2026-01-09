@@ -9,7 +9,7 @@
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
 #include <access/htup_details.h>
-
+#include <access/xact.h>
 
 #include "metadata.h"
 #include "chunk.h"
@@ -43,10 +43,7 @@ get_chunk_table_name(const char *schema_name, const char *table_name)
 {   
     StringInfoData name;
     initStringInfo(&name);
-    
-    appendStringInfo(&name, "%s.%s", 
-                     quote_identifier(schema_name),
-                     quote_identifier(table_name));
+    appendStringInfo(&name, "%s.%s", quote_identifier(schema_name), quote_identifier(table_name));
     
     return name.data;
 }
@@ -65,37 +62,19 @@ get_chunk_info(int chunk_id, char **schema_name_out, char **table_name_out)
     int ret;
     bool isnull;
     Datum datum;
-
+    
     initStringInfo(&query);
     appendStringInfo(&query,
-                    "SELECT schema_name, table_name "
-                    "FROM _timeseries_catalog.chunk "
-                    "WHERE id = %d;", chunk_id);
-    
-    SPI_connect();
-    
+        "SELECT schema_name, table_name "
+        "FROM _timeseries_catalog.chunk "
+        "WHERE id = %d", chunk_id);
+
     ret = SPI_execute(query.data, true, 0);
-    elog(NOTICE, "ret: %d", ret);
-    elog(NOTICE, "ret code: %s", SPI_result_code_string(ret));
-
-    // if (ret < 0){
-    //     SPI_finish();
-    //     ereport(ERROR, errmsg("chunk with id %d not found", chunk_id));
-    // }
-
-    if (ret != SPI_OK_SELECT) {
-        SPI_finish();
-        ereport(ERROR, errmsg("SELECT failed with code %d", ret)); // segfault
-    }
-
-    if (SPI_processed == 0) {
+    elog(NOTICE, "%ld", SPI_processed);
+    
+    if (ret != SPI_OK_SELECT || SPI_processed == 0){
         SPI_finish();
         ereport(ERROR, errmsg("chunk with id %d not found", chunk_id));
-    }
-
-    if (SPI_tuptable == NULL || SPI_tuptable->vals[0] == NULL) {
-        SPI_finish();
-        ereport(ERROR, errmsg("unexpected NULL result"));
     }
 
     datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
@@ -103,8 +82,6 @@ get_chunk_info(int chunk_id, char **schema_name_out, char **table_name_out)
     
     datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
     *table_name_out = pstrdup(TextDatumGetCString(datum));
-
-    SPI_finish();
 }
 
 /*
@@ -121,12 +98,9 @@ static char*
 build_insert_query(const char *chunk_table, TupleDesc tupdesc, HeapTuple tuple)
 {
     StringInfoData query;
-    StringInfoData values;
     int num_atts = tupdesc->natts;
     
     initStringInfo(&query);
-    initStringInfo(&values);
-
     appendStringInfo(&query, "INSERT INTO %s VALUES (", chunk_table);
 
     for(int i=0; i<num_atts; i++){
@@ -169,6 +143,7 @@ build_insert_query(const char *chunk_table, TupleDesc tupdesc, HeapTuple tuple)
         }
     }
     appendStringInfoString(&query, ")");
+    elog(NOTICE, "%s", query.data);
 
     return query.data;
 }
@@ -189,8 +164,8 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
 {
     TriggerData *trigdata = (TriggerData *) fcinfo->context;
     Relation rel;
-    char *schema_name;
-    char *table_name;
+    char *schema_name = NULL;
+    char *table_name = NULL;
     int hypertable_id;
     AttrNumber time_attnum;
     int64 time_value;
@@ -214,7 +189,7 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
         ereport(ERROR, errmsg("hypertable_insert_trigger: must be a BEFORE trigger"));
     }
 
-        // check trigger is fired for wach row
+        // check trigger is fired for each row
     if(!TRIGGER_FIRED_FOR_ROW(trigdata->tg_event)){
         ereport(ERROR, errmsg("hypertable_insert_trigger: must be a FOR EACH ROW trigger"));
     }
@@ -223,7 +198,8 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     rel = trigdata->tg_relation;
     schema_name = get_namespace_name(RelationGetNamespace(rel));
     table_name = RelationGetRelationName(rel);
-
+    
+    SPI_connect();
     hypertable_id = metadata_get_hypertable_id(schema_name, table_name);
     if(hypertable_id == -1){
         ereport(ERROR, errmsg("table \"%s.%s\" is not a hypertable", schema_name, table_name));
@@ -235,8 +211,6 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     Datum datum;
     char *time_column_name;
 
-    SPI_connect();
-    
     initStringInfo(&query);
     appendStringInfo(&query,
         "SELECT column_name FROM _timeseries_catalog.dimension "
@@ -274,8 +248,8 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     time_value = get_time_value_from_tuple(trigdata->tg_trigtuple, tupdesc, time_attnum);
 
     chunk_id = chunk_get_or_create(hypertable_id, time_value);
+    CommandCounterIncrement();
     elog(NOTICE, "Using chunk_id: %d", chunk_id);
-
     
     // fetch chunk
     get_chunk_info(chunk_id, &chunk_schema, &chunk_table);
@@ -318,19 +292,14 @@ trigger_create_on_hypertable(const char *schema_name, const char *table_name)
                         "FOR EACH ROW "
                     "EXECUTE FUNCTION hypertable_insert_trigger()",
                     trigger_name,
-                    quote_identifier(schema_name), quote_identifier(table_name));
+                    schema_name, table_name);
     
     elog(DEBUG1, "Creating trigger: %s", query.data);
     
-    SPI_connect();
-
     int ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_UTILITY){
-        SPI_finish();
         ereport(ERROR, errmsg("failed to create insert trigger on \"%s.%s\"", schema_name, table_name));
     }
-
-    SPI_finish();
     elog(NOTICE, "Created INSERT trigger on \"%s.%s\"", schema_name, table_name);
 }
 
@@ -348,17 +317,11 @@ trigger_drop_on_hypertable(const char *schema_name, const char *table_name)
                     "DROP TRIGGER IF EXISTS %s ON %s.%s",
                     trigger_name, quote_identifier(schema_name), quote_identifier(table_name));
     
-    SPI_connect();
-    
     int ret = SPI_execute(query.data, false, 0);
     if (ret != SPI_OK_UTILITY){
-        SPI_finish();
         ereport(WARNING, errmsg("failed to drop insert trigger on \"%s.%s\"", schema_name, table_name));
         return;
     }
-    
-    SPI_finish();
-    
     elog(NOTICE, "Dropped INSERT trigger from \"%s.%s\"", schema_name, table_name);
 }
 

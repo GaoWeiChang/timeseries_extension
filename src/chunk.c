@@ -4,6 +4,7 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <commands/tablecmds.h>
+
 #include <nodes/parsenodes.h>
 #include <parser/parse_node.h>
 #include <parser/parse_utilcmd.h>
@@ -33,7 +34,6 @@ chunk_get_next_number(int hypertable_id)
         "WHERE hypertable_id = %d",
         hypertable_id);
     
-    SPI_connect();
     
     int ret = SPI_execute(query.data, true, 0);
     if (ret != SPI_OK_SELECT || SPI_processed == 0){
@@ -43,8 +43,6 @@ chunk_get_next_number(int hypertable_id)
     
     bool isnull;
     chunk_number = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
-    
-    SPI_finish();
     
     return chunk_number;
 }
@@ -95,13 +93,11 @@ chunk_create_table(const char *hypertable_schema,
     elog(DEBUG1, "Creating chunk table: %s", query.data);
     
     // create inherit table
-    SPI_connect();
     int ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_UTILITY){
         SPI_finish();
         ereport(ERROR, (errmsg("failed to create chunk table \"%s\"", chunk_name)));
     }
-    SPI_finish();
 
     chunk_oid = get_relname_relid(chunk_name, get_namespace_oid(chunk_schema, false));
 
@@ -118,13 +114,11 @@ chunk_create_table(const char *hypertable_schema,
         time_column, psprintf("TO_TIMESTAMP(" INT64_FORMAT "::double precision / 1000000)", start_time),
         time_column, psprintf("TO_TIMESTAMP(" INT64_FORMAT "::double precision / 1000000)", end_time));
     
-    SPI_connect();
     ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_UTILITY){
         SPI_finish();
         ereport(ERROR, errmsg("failed to add time constraint to chunk \"%s\"", chunk_name));
     }
-    SPI_finish();
 
     return chunk_oid;
 }
@@ -158,8 +152,6 @@ chunk_create(int hypertable_id, int64 time_point)
         "WHERE h.id = %d",
         hypertable_id);
     
-    SPI_connect();
-
     int ret = SPI_execute(query.data, true, 0);
     if(ret != SPI_OK_SELECT || SPI_processed == 0){
         SPI_finish();
@@ -181,8 +173,6 @@ chunk_create(int hypertable_id, int64 time_point)
     datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 4, &isnull);
     chunk_interval = DatumGetInt64(datum);
     
-    SPI_finish();
-
     // calculate chunk boundaries
     chunk_start = chunk_calculate_start(time_point, chunk_interval);
     chunk_end = chunk_calculate_end(chunk_start, chunk_interval);
@@ -199,30 +189,23 @@ chunk_create(int hypertable_id, int64 time_point)
                                     time_column,
                                     chunk_start,
                                     chunk_end);
-    
+
     // save metadata
     chunk_id = metadata_insert_chunk(hypertable_id,
                                     hypertable_schema,
                                     chunk_name,
                                     chunk_start,
                                     chunk_end);
-
     elog(NOTICE, "✅ Chunk %d created successfully (OID: %u)", chunk_id, chunk_oid);
     
     return chunk_id;
-}
-
-int
-chunk_find_for_timestamp(int hypertable_id, int64 timestamp)
-{
-    return metadata_find_chunk(hypertable_id, timestamp);
 }
 
 int 
 chunk_get_or_create(int hypertable_id, int64 timestamp)
 {
     int chunk_id;
-    chunk_id = chunk_find_for_timestamp(hypertable_id, timestamp);
+    chunk_id = metadata_find_chunk(hypertable_id, timestamp);
 
     if(chunk_id > 0){
         return chunk_id;
@@ -250,7 +233,9 @@ test_create_chunk(PG_FUNCTION_ARGS)
     TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(1);
     int64 time_us = timestamp;
     
+    SPI_connect();
     int chunk_id = chunk_create(hypertable_id, time_us);
+    SPI_finish();
     
     PG_RETURN_INT32(chunk_id);
 }
@@ -267,9 +252,10 @@ test_find_chunk_for_time(PG_FUNCTION_ARGS)
     TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(1);
     
     int64 time_us = timestamp;
-    
-    int chunk_id = chunk_find_for_timestamp(hypertable_id, time_us);
-    
+    SPI_connect();
+    int chunk_id = metadata_find_chunk(hypertable_id, time_us);
+    SPI_finish();
+
     PG_RETURN_INT32(chunk_id);
 }
 
@@ -283,10 +269,11 @@ test_get_or_create_chunk(PG_FUNCTION_ARGS)
 {
     int hypertable_id = PG_GETARG_INT32(0);
     TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(1);
-    
     int64 time_us = timestamp;
-    
+
+    SPI_connect();
     int chunk_id = chunk_get_or_create(hypertable_id, time_us);
-    
+    SPI_finish();
+
     PG_RETURN_INT32(chunk_id);
 }

@@ -16,15 +16,13 @@ metadata_is_hypertable(const char *schema_name, const char *table_name)
 {
     StringInfoData query;
     initStringInfo(&query);
-        appendStringInfo(&query,
+    appendStringInfo(&query,
         "SELECT * FROM _timeseries_catalog.hypertable "
         "WHERE schema_name='%s' AND table_name='%s'",
         schema_name, table_name);
     
-    SPI_connect();
     SPI_execute(query.data, true, 0);
     bool exists = (SPI_processed > 0);
-    SPI_finish();
 
     return exists;
 }
@@ -47,14 +45,12 @@ metadata_insert_hypertable(const char *schema_name, const char *table_name)
         "VALUES (%s, %s) RETURNING id",
         quote_literal_cstr(schema_name), quote_literal_cstr(table_name));
     
-    SPI_connect();
     SPI_execute(query.data, false, 0);
     if (SPI_processed <= 0){
         ereport(ERROR,
                 (errmsg("failed to insert hypertable metadata")));
     }
     hypertable_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
-    SPI_finish();
 
     return hypertable_id;
 }
@@ -76,13 +72,11 @@ metadata_get_hypertable_id(const char *schema_name, const char *table_name)
         "WHERE schema_name='%s' AND table_name='%s'",
         schema_name, table_name);
     
-    SPI_connect();
     SPI_execute(query.data, true, 0);
     if (SPI_processed > 0){
         bool isnull;
         hypertable_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     }
-    SPI_finish();
 
     return hypertable_id;
 }
@@ -101,15 +95,12 @@ metadata_drop_hypertable(const char *schema_name, const char *table_name)
         "WHERE schema_name=%s AND table_name=%s",
         quote_literal_cstr(schema_name), quote_literal_cstr(table_name));
     
-    SPI_connect();
     int ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_DELETE){
         ereport(ERROR,
                 (errcode(ERRCODE_INTERNAL_ERROR),
                  errmsg("Failed to delete hypertable %s", table_name)));
     }
-    
-    SPI_finish();
 }
 
 /*
@@ -132,13 +123,11 @@ metadata_insert_dimension(int hypertable_id,
                     "VALUES (%d, '%s', '%s', " INT64_FORMAT ")",
                     hypertable_id, column_name, type_name, interval_microseconds);
     
-    SPI_connect();
     SPI_execute(query.data, false, 0);
     if (SPI_processed <= 0){
         ereport(ERROR,
                 (errmsg("failed to insert dimension metadata")));
     }
-    SPI_finish();
 }
 
 /*
@@ -158,13 +147,11 @@ metadata_get_chunk_interval(int hypertable_id)
         "WHERE hypertable_id=%d",
         hypertable_id);
     
-    SPI_connect();
     SPI_execute(query.data, true, 0);
     if (SPI_processed > 0){
         bool isnull;
         interval = DatumGetInt64(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     }
-    SPI_finish();
     
     return interval;
 }
@@ -192,14 +179,12 @@ metadata_insert_chunk(int hypertable_id,
         "VALUES (%d, '%s', '%s', " INT64_FORMAT ", " INT64_FORMAT ") RETURNING id",
         hypertable_id, schema_name, table_name, start_time, end_time);
     
-    SPI_connect();
     SPI_execute(query.data, false, 0);
     if (SPI_processed <= 0){
         ereport(ERROR,
                 (errmsg("failed to insert dimension metadata")));
     }
     chunk_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
-    SPI_finish();
 
     return chunk_id;
 }
@@ -221,13 +206,11 @@ metadata_find_chunk(int hypertable_id, int64 time_microseconds)
         "WHERE hypertable_id=%d AND start_time<=" INT64_FORMAT " AND end_time>" INT64_FORMAT,
         hypertable_id, time_microseconds, time_microseconds);
     
-    SPI_connect();
     SPI_execute(query.data, true, 0);
     if (SPI_processed > 0){
         bool isnull;
         chunk_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     }
-    SPI_finish();
 
     return chunk_id;
 }

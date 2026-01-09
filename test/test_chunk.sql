@@ -23,9 +23,6 @@ SELECT create_hypertable('chunk_test', 'time', INTERVAL '1 day');
 \echo '✓ Created hypertable: chunk_test'
 \echo ''
 
--- ==========================================
--- Test 1: สร้าง Chunk แรก
--- ==========================================
 
 \echo 'Test 1: Creating first chunk...'
 \echo ''
