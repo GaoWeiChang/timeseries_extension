@@ -19,7 +19,6 @@
 
 /*
  * Find next chunk number
- * Parameter: hypertable_id
  * return chunk number
  */
 static int
@@ -45,6 +44,44 @@ chunk_get_next_number(int hypertable_id)
     chunk_number = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     
     return chunk_number;
+}
+
+static ChunkInfo*
+chunk_get_info(int chunk_id)
+{
+    StringInfoData query;
+    int ret;
+    bool isnull;
+    Datum datum;
+    ChunkInfo *info;
+
+    initStringInfo(&query);
+    appendStringInfo(&query, 
+        "SELECT schema_name, table_name, start_time, end_time "
+        "FROM _timeseries_catalog.chunk "
+        "WHERE id = %d", chunk_id);
+    
+    ret = SPI_execute(query.data, true, 0);
+    if (ret != SPI_OK_SELECT || SPI_processed == 0){
+        ereport(ERROR, errmsg("chunk with id %d not found", chunk_id));
+    }
+
+    info = (ChunkInfo *) palloc(sizeof(ChunkInfo));
+    info->chunk_id = chunk_id;
+
+    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+    strncpy(info->schema_name, TextDatumGetCString(datum), NAMEDATALEN);
+    
+    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
+    strncpy(info->table_name, TextDatumGetCString(datum), NAMEDATALEN);
+    
+    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 3, &isnull);
+    info->start_time = DatumGetInt64(datum);
+    
+    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 4, &isnull);
+    info->end_time = DatumGetInt64(datum);
+
+    return info;
 }
 
 /*
@@ -108,12 +145,13 @@ chunk_create_table(const char *hypertable_schema,
     appendStringInfo(&query,
         "ALTER TABLE %s.%s "
         "ADD CONSTRAINT %s_time_check "
-        "CHECK (%s >= %s AND %s < %s)",
+        "CHECK (%s >= '2000-01-01 UTC'::timestamptz + '%ld microseconds'::interval "
+        "AND %s < '2000-01-01 UTC'::timestamptz + '%ld microseconds'::interval)",
         chunk_schema, chunk_name,
         chunk_name,
-        time_column, psprintf("TO_TIMESTAMP(" INT64_FORMAT "::double precision / 1000000)", start_time),
-        time_column, psprintf("TO_TIMESTAMP(" INT64_FORMAT "::double precision / 1000000)", end_time));
-    
+        time_column, start_time,
+        time_column, end_time);
+
     ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_UTILITY){
         SPI_finish();
@@ -124,11 +162,7 @@ chunk_create_table(const char *hypertable_schema,
 }
 
 
-/*
- * build new chunk
- * return chunk id
- */
-int 
+ChunkInfo* 
 chunk_create(int hypertable_id, int64 time_point)
 {
     StringInfoData query;
@@ -149,8 +183,7 @@ chunk_create(int hypertable_id, int64 time_point)
         "SELECT h.schema_name, h.table_name, d.column_name, d.interval_length "
         "FROM _timeseries_catalog.hypertable h "
         "JOIN _timeseries_catalog.dimension d ON h.id = d.hypertable_id "
-        "WHERE h.id = %d",
-        hypertable_id);
+        "WHERE h.id = %d", hypertable_id);
     
     int ret = SPI_execute(query.data, true, 0);
     if(ret != SPI_OK_SELECT || SPI_processed == 0){
@@ -196,36 +229,35 @@ chunk_create(int hypertable_id, int64 time_point)
                                     chunk_name,
                                     chunk_start,
                                     chunk_end);
-    elog(NOTICE, "✅ Chunk %d created successfully (OID: %u)", chunk_id, chunk_oid);
     
-    return chunk_id;
+    ChunkInfo *info = (ChunkInfo *) palloc(sizeof(ChunkInfo));
+    info->chunk_id = chunk_id;
+
+    strcpy(info->schema_name, hypertable_schema);
+    strcpy(info->table_name, chunk_name);
+    info->start_time = chunk_start;
+    info->end_time = chunk_end;
+    
+    elog(NOTICE, "✅ Chunk %d created successfully (OID: %u)", info->chunk_id, chunk_oid);
+    return info;
 }
 
-int 
+
+ChunkInfo* 
 chunk_get_or_create(int hypertable_id, int64 timestamp)
 {
     int chunk_id;
     chunk_id = metadata_find_chunk(hypertable_id, timestamp);
 
-    if(chunk_id > 0){
-        return chunk_id;
+    if(chunk_id != -1){
+        return chunk_get_info(chunk_id);
     }
 
-    chunk_id = chunk_create(hypertable_id, timestamp);
-    return chunk_id;
+    return chunk_create(hypertable_id, timestamp);
 }
 
-/*
- * ==========================================
- * SQL-Callable Test Functions
- * ==========================================
- */
 
-/*
- * test_create_chunk() - ฟังก์ชันทดสอบสร้าง chunk
- */
 PG_FUNCTION_INFO_V1(test_create_chunk);
-
 Datum
 test_create_chunk(PG_FUNCTION_ARGS)
 {
@@ -234,17 +266,14 @@ test_create_chunk(PG_FUNCTION_ARGS)
     int64 time_us = timestamp;
     
     SPI_connect();
-    int chunk_id = chunk_create(hypertable_id, time_us);
+    int chunk_id = chunk_create(hypertable_id, time_us)->chunk_id;
     SPI_finish();
     
     PG_RETURN_INT32(chunk_id);
 }
 
-/*
- * test_find_chunk_for_time() - ฟังก์ชันทดสอบหา chunk
- */
-PG_FUNCTION_INFO_V1(test_find_chunk_for_time);
 
+PG_FUNCTION_INFO_V1(test_find_chunk_for_time);
 Datum
 test_find_chunk_for_time(PG_FUNCTION_ARGS)
 {
@@ -259,11 +288,7 @@ test_find_chunk_for_time(PG_FUNCTION_ARGS)
     PG_RETURN_INT32(chunk_id);
 }
 
-/*
- * test_get_or_create_chunk() - ฟังก์ชันทดสอบ get_or_create
- */
 PG_FUNCTION_INFO_V1(test_get_or_create_chunk);
-
 Datum
 test_get_or_create_chunk(PG_FUNCTION_ARGS)
 {
@@ -272,7 +297,7 @@ test_get_or_create_chunk(PG_FUNCTION_ARGS)
     int64 time_us = timestamp;
 
     SPI_connect();
-    int chunk_id = chunk_get_or_create(hypertable_id, time_us);
+    int chunk_id = chunk_get_or_create(hypertable_id, time_us)->chunk_id;
     SPI_finish();
 
     PG_RETURN_INT32(chunk_id);
