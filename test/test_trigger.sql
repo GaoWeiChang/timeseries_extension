@@ -11,7 +11,7 @@ CREATE TABLE sensor_data (
 
 SELECT create_hypertable('sensor_data', 'time', INTERVAL '1 day');
 
-INSERT INTO sensor_data VALUES ('2024-01-01 00:00:00+00', 1, 25.5, 60.0);
+INSERT INTO sensor_data VALUES ('2024-01-01 00:00:00+00'::timestamptz, 1, 25.5, 60.0);
 
 SELECT COUNT(*) FROM ONLY sensor_data;
 SELECT COUNT(*) FROM sensor_data;

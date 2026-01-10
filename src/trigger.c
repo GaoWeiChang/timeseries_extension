@@ -49,42 +49,6 @@ get_chunk_table_name(const char *schema_name, const char *table_name)
 }
 
 /*
- * Get chunk info by chunk id
- * Parameters:
- *   chunk_id
- *   schema_name_out: output of chunk's schema
- *   table_name_out: output of chunk table name
- */
-static void
-get_chunk_info(int chunk_id, char **schema_name_out, char **table_name_out)
-{
-    StringInfoData query;
-    int ret;
-    bool isnull;
-    Datum datum;
-    
-    initStringInfo(&query);
-    appendStringInfo(&query,
-        "SELECT schema_name, table_name "
-        "FROM _timeseries_catalog.chunk "
-        "WHERE id = %d", chunk_id);
-
-    ret = SPI_execute(query.data, true, 0);
-    elog(NOTICE, "%ld", SPI_processed);
-    
-    if (ret != SPI_OK_SELECT || SPI_processed == 0){
-        SPI_finish();
-        ereport(ERROR, errmsg("chunk with id %d not found", chunk_id));
-    }
-
-    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
-    *schema_name_out = pstrdup(TextDatumGetCString(datum));
-    
-    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
-    *table_name_out = pstrdup(TextDatumGetCString(datum));
-}
-
-/*
  * Build INSERT statement for chunk
  * Parameters:
  *   chunk_table - chunk table name
@@ -169,9 +133,7 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     int hypertable_id;
     AttrNumber time_attnum;
     int64 time_value;
-    int chunk_id;
-    char *chunk_schema;
-    char *chunk_table;
+    ChunkInfo *chunk_info;
     char *chunk_full_name;
     char *insert_query;
     int ret;
@@ -230,7 +192,6 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     time_attnum = InvalidAttrNumber;
     for(int i=0; i<tupdesc->natts; i++){
         Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
-        
         if (attr->attisdropped){
             continue;
         }
@@ -247,18 +208,15 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     // fetch timestamp
     time_value = get_time_value_from_tuple(trigdata->tg_trigtuple, tupdesc, time_attnum);
 
-    chunk_id = chunk_get_or_create(hypertable_id, time_value);
-    CommandCounterIncrement();
-    elog(NOTICE, "Using chunk_id: %d", chunk_id);
+    chunk_info = chunk_get_or_create(hypertable_id, time_value);
+    elog(NOTICE, "Using chunk_id: %d", chunk_info->chunk_id);
     
     // fetch chunk
-    get_chunk_info(chunk_id, &chunk_schema, &chunk_table);
-    chunk_full_name = get_chunk_table_name(chunk_schema, chunk_table);
+    chunk_full_name = get_chunk_table_name(chunk_info->schema_name, chunk_info->table_name);
     elog(NOTICE, "Target chunk: %s", chunk_full_name);
     
     // insert to chunk table
     insert_query = build_insert_query(chunk_full_name, tupdesc, trigdata->tg_trigtuple);
-    elog(NOTICE, "executing INSERT query...");
     
     ret = SPI_execute(insert_query, false, 0);
     if (ret != SPI_OK_INSERT){
@@ -267,7 +225,7 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     }
     SPI_finish();
     
-    PG_RETURN_NULL();  // return NULL จะยกเลิก INSERT ใน table ที่ trigger อยู่ since it already inserted chunk
+    return PointerGetDatum(NULL);  // since it already inserted chunk, no need to insert again
 }
 
 /*
@@ -288,8 +246,8 @@ trigger_create_on_hypertable(const char *schema_name, const char *table_name)
     initStringInfo(&query);
     appendStringInfo(&query,
                     "CREATE TRIGGER %s "
-                        "BEFORE INSERT ON %s.%s "
-                        "FOR EACH ROW "
+                    "BEFORE INSERT ON %s.%s "
+                    "FOR EACH ROW "
                     "EXECUTE FUNCTION hypertable_insert_trigger()",
                     trigger_name,
                     schema_name, table_name);
