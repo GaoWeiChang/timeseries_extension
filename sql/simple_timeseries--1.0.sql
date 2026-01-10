@@ -262,7 +262,7 @@ COMMENT ON FUNCTION test_get_or_create_chunk(INTEGER, TIMESTAMPTZ) IS
 -- ==========================================
 -- TRIGGER FUNCTIONS
 -- ==========================================
-CREATE FUNCTION hypertable_insert_trigger()
+CREATE FUNCTION trigger_insert()
 RETURNS TRIGGER
-AS 'MODULE_PATHNAME', 'hypertable_insert_trigger'
+AS 'MODULE_PATHNAME', 'trigger_insert'
 LANGUAGE C;

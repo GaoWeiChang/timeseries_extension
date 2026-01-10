@@ -16,11 +16,6 @@
 #define USECS_PER_DAY INT64CONST(86400000000)
 #define USECS_PER_HOUR INT64CONST(3600000000)
 
-/*
- * Convert interval to microsecond
- * Parameter: postgres Interval type
- * return microsecond
- */
 static int64
 interval_to_microseconds(Interval *interval)
 {
@@ -31,13 +26,6 @@ interval_to_microseconds(Interval *interval)
     return result;
 }
 
-/*
- * Find time column in table
- * Parameter:
- *      rel - Relation (table)
- *      time_column_name - column name
- * return Attribute Number (number of column)
- */
 static AttrNumber
 find_time_column(Relation rel, const char *time_column_name)
 {
@@ -70,10 +58,6 @@ find_time_column(Relation rel, const char *time_column_name)
     return time_attnum;
 }
 
-/*
- * Check is table validate for hypertable or not
- *
- */
 static void
 validate_table_for_hypertable(Relation rel)
 {
@@ -111,16 +95,6 @@ validate_table_for_hypertable(Relation rel)
     }
 }
 
-/*
- * Convert normal table to hypertable
- * 
- * create_hypertable(
- *      table_name REGCLASS,
- *      time_column_name NAME，
- *      chunk_time_interval INTERVAL
- * ) RETURNS VOID
- * 
- */
 PG_FUNCTION_INFO_V1(create_hypertable);
 Datum
 create_hypertable(PG_FUNCTION_ARGS)
@@ -143,7 +117,6 @@ create_hypertable(PG_FUNCTION_ARGS)
     time_column_name = text_to_cstring(time_column_text);
     chunk_interval = PG_GETARG_INTERVAL_P(2);
 
-    // check table 
     rel = table_open(table_oid, AccessExclusiveLock);
     schema_name = get_namespace_name(RelationGetNamespace(rel));
     table_name = pstrdup(RelationGetRelationName(rel));
@@ -151,14 +124,12 @@ create_hypertable(PG_FUNCTION_ARGS)
     SPI_connect();
     validate_table_for_hypertable(rel);
 
-    // check time column
     time_attnum = find_time_column(rel, time_column_name);
 
     TupleDesc tupdesc = RelationGetDescr(rel);
     Form_pg_attribute time_attr = TupleDescAttr(tupdesc, time_attnum - 1);
     time_type = time_attr->atttypid;
 
-    // convert from interval to microseconds
     interval_us = interval_to_microseconds(chunk_interval);
     if (interval_us >= USECS_PER_DAY)
     {
@@ -175,7 +146,6 @@ create_hypertable(PG_FUNCTION_ARGS)
         elog(NOTICE, "Chunk time interval: %ld microseconds", interval_us);
     }
 
-    // save metadata
     hypertable_id = metadata_insert_hypertable(schema_name, table_name);
     elog(NOTICE, "Created hypertable with ID: %d", hypertable_id);
     metadata_insert_dimension(hypertable_id,
@@ -186,7 +156,6 @@ create_hypertable(PG_FUNCTION_ARGS)
     
     trigger_create_on_hypertable(schema_name, table_name);
     
-    // close table
     table_close(rel, AccessExclusiveLock);
     elog(NOTICE, "✅ Successfully converted \"%s.%s\" to hypertable", schema_name, table_name);
     SPI_finish();
@@ -194,14 +163,6 @@ create_hypertable(PG_FUNCTION_ARGS)
     PG_RETURN_VOID();
 }
 
-/*
- * Remove hypertable
- * 
- * drop_hypertable(
- *      table_name REGCLASS,
- * ) RETURNS VOID
- * 
- */
 PG_FUNCTION_INFO_V1(drop_hypertable);
 Datum
 drop_hypertable(PG_FUNCTION_ARGS)

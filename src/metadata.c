@@ -6,11 +6,6 @@
 
 #include "metadata.h"
 
-/*
- * Check whether a table is a hypertable.
- * 
- * return true if the table is a hypertable, false otherwise
- */
 bool 
 metadata_is_hypertable(const char *schema_name, const char *table_name)
 {
@@ -27,11 +22,6 @@ metadata_is_hypertable(const char *schema_name, const char *table_name)
     return exists;
 }
 
-/*
- * Build hypertable metadata.
- * 
- * return hypertable id
- */
 int 
 metadata_insert_hypertable(const char *schema_name, const char *table_name)
 {
@@ -55,11 +45,6 @@ metadata_insert_hypertable(const char *schema_name, const char *table_name)
     return hypertable_id;
 }
 
-/*
- * Find hypertable id.
- * 
- * return hypertable id
- */
 int 
 metadata_get_hypertable_id(const char *schema_name, const char *table_name)
 {
@@ -81,10 +66,6 @@ metadata_get_hypertable_id(const char *schema_name, const char *table_name)
     return hypertable_id;
 }
 
-/*
- * Delete hypertable metadata.
- * 
- */
 void 
 metadata_drop_hypertable(const char *schema_name, const char *table_name)
 {
@@ -103,10 +84,6 @@ metadata_drop_hypertable(const char *schema_name, const char *table_name)
     }
 }
 
-/*
- * Build dimension metadata.
- * 
- */
 void 
 metadata_insert_dimension(int hypertable_id,
                           const char *column_name,
@@ -130,11 +107,6 @@ metadata_insert_dimension(int hypertable_id,
     }
 }
 
-/*
- * Get chunk size
- * 
- * return chunk interval
- */
 int64
 metadata_get_chunk_interval(int hypertable_id)
 {
@@ -156,11 +128,6 @@ metadata_get_chunk_interval(int hypertable_id)
     return interval;
 }
 
-/*
- * Build chunk metadata
- * 
- * return chunk id
- */
 int 
 metadata_insert_chunk(int hypertable_id,
                           const char *schema_name,
@@ -189,11 +156,6 @@ metadata_insert_chunk(int hypertable_id,
     return chunk_id;
 }
 
-/*
- * Find chunk by time
- * 
- * return chunk id
- */
 int 
 metadata_find_chunk(int hypertable_id, int64 time_microseconds)
 {
@@ -229,7 +191,7 @@ test_create_hypertable_metadata(PG_FUNCTION_ARGS)
     StringInfoData query;
     initStringInfo(&query);
     
-    // Insert hypertable 
+    // insert hypertable 
     appendStringInfo(&query,
         "INSERT INTO _timeseries_catalog.hypertable (schema_name, table_name) "
         "VALUES ('%s', '%s') RETURNING id",
@@ -241,7 +203,7 @@ test_create_hypertable_metadata(PG_FUNCTION_ARGS)
     bool isnull;
     int hypertable_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     
-    // Insert dimension 
+    // insert dimension 
     resetStringInfo(&query);
     appendStringInfo(&query,
         "INSERT INTO _timeseries_catalog.dimension "

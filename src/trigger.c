@@ -14,13 +14,8 @@
 #include "metadata.h"
 #include "chunk.h"
 
-/*
- * ==========================================
- * Private
- * ==========================================
- */
+/* Private Functions */
 
-// Get time stamp from tuple
 static int64
 get_time_value_from_tuple(HeapTuple tuple, TupleDesc tupdesc, AttrNumber time_attnum)
 {
@@ -37,7 +32,6 @@ get_time_value_from_tuple(HeapTuple tuple, TupleDesc tupdesc, AttrNumber time_at
     return timestamp;
 }
 
-// Create chunk table name
 static char* 
 get_chunk_table_name(const char *schema_name, const char *table_name)
 {   
@@ -48,16 +42,6 @@ get_chunk_table_name(const char *schema_name, const char *table_name)
     return name.data;
 }
 
-/*
- * Build INSERT statement for chunk
- * Parameters:
- *   chunk_table - chunk table name
- *   tupdesc - Tuple descriptor
- *   tuple - Data want to insert
- *
- * Returns:
- *   SQL statement
- */
 static char*
 build_insert_query(const char *chunk_table, TupleDesc tupdesc, HeapTuple tuple)
 {
@@ -112,19 +96,11 @@ build_insert_query(const char *chunk_table, TupleDesc tupdesc, HeapTuple tuple)
     return query.data;
 }
 
-/*
- * Hypertable insert trigger
- * Parameters:
- *   chunk_table - chunk table name
- *   tupdesc - Tuple descriptor
- *   tuple - Data want to insert
- *
- * Returns:
- *   SQL statement
- */
-PG_FUNCTION_INFO_V1(hypertable_insert_trigger);
+/* Top-level Functions */
+
+PG_FUNCTION_INFO_V1(trigger_insert);
 Datum
-hypertable_insert_trigger(PG_FUNCTION_ARGS)
+trigger_insert(PG_FUNCTION_ARGS)
 {
     TriggerData *trigdata = (TriggerData *) fcinfo->context;
     Relation rel;
@@ -140,20 +116,19 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
 
     // check trigger
     if(!CALLED_AS_TRIGGER(fcinfo)){
-        ereport(ERROR, errmsg("hypertable_insert_trigger: not called by trigger manager"));
+        ereport(ERROR, errmsg("trigger_insert: not called by trigger manager"));
     }
 
     if(!TRIGGER_FIRED_BY_INSERT(trigdata->tg_event)){
-        ereport(ERROR, errmsg("hypertable_insert_trigger: can only be used for INSERT"));
+        ereport(ERROR, errmsg("trigger_insert: can only be used for INSERT"));
     }
 
     if(!TRIGGER_FIRED_BEFORE(trigdata->tg_event)){
-        ereport(ERROR, errmsg("hypertable_insert_trigger: must be a BEFORE trigger"));
+        ereport(ERROR, errmsg("trigger_insert: must be a BEFORE trigger"));
     }
 
-        // check trigger is fired for each row
     if(!TRIGGER_FIRED_FOR_ROW(trigdata->tg_event)){
-        ereport(ERROR, errmsg("hypertable_insert_trigger: must be a FOR EACH ROW trigger"));
+        ereport(ERROR, errmsg("trigger_insert: must be a FOR EACH ROW trigger"));
     }
 
     // fetch hypertable
@@ -207,7 +182,6 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     
     // fetch timestamp
     time_value = get_time_value_from_tuple(trigdata->tg_trigtuple, tupdesc, time_attnum);
-
     chunk_info = chunk_get_or_create(hypertable_id, time_value);
     elog(NOTICE, "Using chunk_id: %d", chunk_info->chunk_id);
     
@@ -225,16 +199,11 @@ hypertable_insert_trigger(PG_FUNCTION_ARGS)
     }
     SPI_finish();
     
-    return PointerGetDatum(NULL);  // since it already inserted chunk, no need to insert again
+    return PointerGetDatum(NULL);  // since it already inserted at chunk, no need to insert again
 }
 
-/*
- * ==========================================
- * Public functions
- * ==========================================
- */
+/* Public Functions */
 
-// create trigger
 void
 trigger_create_on_hypertable(const char *schema_name, const char *table_name)
 {
@@ -248,20 +217,17 @@ trigger_create_on_hypertable(const char *schema_name, const char *table_name)
                     "CREATE TRIGGER %s "
                     "BEFORE INSERT ON %s.%s "
                     "FOR EACH ROW "
-                    "EXECUTE FUNCTION hypertable_insert_trigger()",
+                    "EXECUTE FUNCTION trigger_insert()",
                     trigger_name,
                     schema_name, table_name);
     
-    elog(DEBUG1, "Creating trigger: %s", query.data);
-    
     int ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_UTILITY){
-        ereport(ERROR, errmsg("failed to create insert trigger on \"%s.%s\"", schema_name, table_name));
+        ereport(ERROR, errmsg("Failed to create insert trigger on \"%s.%s\"", schema_name, table_name));
     }
     elog(NOTICE, "Created INSERT trigger on \"%s.%s\"", schema_name, table_name);
 }
 
-// drop trigger
 void 
 trigger_drop_on_hypertable(const char *schema_name, const char *table_name)
 {

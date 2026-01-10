@@ -4,7 +4,6 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <commands/tablecmds.h>
-
 #include <nodes/parsenodes.h>
 #include <parser/parse_node.h>
 #include <parser/parse_utilcmd.h>
@@ -17,10 +16,6 @@
 #include "metadata.h"
 #include "chunk.h"
 
-/*
- * Find next chunk number
- * return chunk number
- */
 static int
 chunk_get_next_number(int hypertable_id)
 {
@@ -84,12 +79,6 @@ chunk_get_info(int chunk_id)
     return info;
 }
 
-/*
- * Calculate chunk start point for place to the closet chunk boundary
- * Parameter: 
- *      hypertable_id
- * Return start time of chunk
- */
 int64 
 chunk_calculate_start(int64 time_point, int64 chunk_interval)
 {
@@ -105,10 +94,7 @@ chunk_calculate_end(int64 chunk_start, int64 chunk_interval)
     return chunk_start + chunk_interval;
 }
 
-/*
- * Build chunk table
- * Return Oid of chunk table
- */
+
 static Oid 
 chunk_create_table(const char *hypertable_schema,
                    const char *hypertable_name,
@@ -140,8 +126,6 @@ chunk_create_table(const char *hypertable_schema,
 
     // add constraint
     resetStringInfo(&query);
-
-    // create constraint
     appendStringInfo(&query,
         "ALTER TABLE %s.%s "
         "ADD CONSTRAINT %s_time_check "
@@ -206,7 +190,6 @@ chunk_create(int hypertable_id, int64 time_point)
     datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 4, &isnull);
     chunk_interval = DatumGetInt64(datum);
     
-    // calculate chunk boundaries
     chunk_start = chunk_calculate_start(time_point, chunk_interval);
     chunk_end = chunk_calculate_end(chunk_start, chunk_interval);
 
@@ -214,7 +197,6 @@ chunk_create(int hypertable_id, int64 time_point)
     chunk_number = chunk_get_next_number(hypertable_id);
     snprintf(chunk_name, NAMEDATALEN, "_hyper_%d_%d_chunk", hypertable_id, chunk_number);
 
-    // build chunk table
     chunk_oid = chunk_create_table(hypertable_schema,
                                     hypertable_name,
                                     hypertable_schema, 
@@ -223,7 +205,6 @@ chunk_create(int hypertable_id, int64 time_point)
                                     chunk_start,
                                     chunk_end);
 
-    // save metadata
     chunk_id = metadata_insert_chunk(hypertable_id,
                                     hypertable_schema,
                                     chunk_name,
@@ -231,8 +212,8 @@ chunk_create(int hypertable_id, int64 time_point)
                                     chunk_end);
     
     ChunkInfo *info = (ChunkInfo *) palloc(sizeof(ChunkInfo));
-    info->chunk_id = chunk_id;
 
+    info->chunk_id = chunk_id;
     strcpy(info->schema_name, hypertable_schema);
     strcpy(info->table_name, chunk_name);
     info->start_time = chunk_start;
