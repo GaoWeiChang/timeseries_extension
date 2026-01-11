@@ -14,3 +14,4 @@ extern int64 chunk_calculate_start(int64 time_point, int64 chunk_interval);
 extern int64 chunk_calculate_end(int64 chunk_start, int64 chunk_interval);
 extern ChunkInfo* chunk_create(int hypertable_id, int64 time_point);
 extern ChunkInfo* chunk_get_or_create(int hypertable_id, int64 timestamp);
+extern void chunk_drop_all_chunk(const char *schema_name, const char *table_name);

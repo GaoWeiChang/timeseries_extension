@@ -12,6 +12,7 @@
 
 #include "metadata.h"
 #include "trigger.h"
+#include "chunk.h"
 
 #define USECS_PER_DAY INT64CONST(86400000000)
 #define USECS_PER_HOUR INT64CONST(3600000000)
@@ -182,11 +183,13 @@ drop_hypertable(PG_FUNCTION_ARGS)
     if(!metadata_is_hypertable(schema_name, table_name)){
         ereport(WARNING, (errmsg("\"%s.%s\" is not a hypertable", schema_name, table_name)));
     }
-
+    
     metadata_drop_hypertable(schema_name, table_name); // drop hypertable
     trigger_drop_on_hypertable(schema_name, table_name); // drop trigger
 
     table_close(rel, AccessExclusiveLock);
+
+    chunk_drop_all_chunk(schema_name, table_name); // drop all chunk table
     elog(NOTICE, "✅ Successfully dropped hypertable \"%s.%s\"", schema_name, table_name);
     SPI_finish();
     

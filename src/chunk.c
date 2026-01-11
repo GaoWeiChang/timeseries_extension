@@ -79,22 +79,6 @@ chunk_get_info(int chunk_id)
     return info;
 }
 
-int64 
-chunk_calculate_start(int64 time_point, int64 chunk_interval)
-{
-    if (chunk_interval <= 0){
-        ereport(ERROR, errmsg("chunk interval must be positive"));
-    }
-    return (time_point/chunk_interval) * chunk_interval;
-}
-
-int64 
-chunk_calculate_end(int64 chunk_start, int64 chunk_interval)
-{
-    return chunk_start + chunk_interval;
-}
-
-
 static Oid 
 chunk_create_table(const char *hypertable_schema,
                    const char *hypertable_name,
@@ -143,6 +127,40 @@ chunk_create_table(const char *hypertable_schema,
     }
 
     return chunk_oid;
+}
+
+int64 
+chunk_calculate_start(int64 time_point, int64 chunk_interval)
+{
+    if (chunk_interval <= 0){
+        ereport(ERROR, errmsg("chunk interval must be positive"));
+    }
+    return (time_point/chunk_interval) * chunk_interval;
+}
+
+int64 
+chunk_calculate_end(int64 chunk_start, int64 chunk_interval)
+{
+    return chunk_start + chunk_interval;
+}
+
+void
+chunk_drop_all_chunk(const char *schema_name, const char *table_name)
+{
+    StringInfoData query;
+    int ret;
+
+    initStringInfo(&query);
+    appendStringInfo(&query,
+        "DROP TABLE IF EXISTS %s.%s CASCADE", schema_name, table_name);
+    
+    ret = SPI_execute(query.data, false, 0);
+    if (ret != SPI_OK_UTILITY) {
+        ereport(WARNING,
+                errmsg("failed to drop chunk table %s.%s", schema_name, table_name));
+    }
+    
+    elog(NOTICE, "Dropped chunk table %s.%s", schema_name, table_name);
 }
 
 
@@ -222,7 +240,6 @@ chunk_create(int hypertable_id, int64 time_point)
     elog(NOTICE, "✅ Chunk %d created successfully (OID: %u)", info->chunk_id, chunk_oid);
     return info;
 }
-
 
 ChunkInfo* 
 chunk_get_or_create(int hypertable_id, int64 timestamp)

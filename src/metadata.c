@@ -37,7 +37,7 @@ metadata_insert_hypertable(const char *schema_name, const char *table_name)
     
     SPI_execute(query.data, false, 0);
     if (SPI_processed <= 0){
-        ereport(ERROR,
+        ereport(ERROR, 
                 (errmsg("failed to insert hypertable metadata")));
     }
     hypertable_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
@@ -78,9 +78,8 @@ metadata_drop_hypertable(const char *schema_name, const char *table_name)
     
     int ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_DELETE){
-        ereport(ERROR,
-                (errcode(ERRCODE_INTERNAL_ERROR),
-                 errmsg("Failed to delete hypertable %s", table_name)));
+        ereport(ERROR, 
+                (errcode(ERRCODE_INTERNAL_ERROR),errmsg("Failed to delete hypertable %s", table_name)));
     }
 }
 
@@ -102,7 +101,7 @@ metadata_insert_dimension(int hypertable_id,
     
     SPI_execute(query.data, false, 0);
     if (SPI_processed <= 0){
-        ereport(ERROR,
+        ereport(ERROR, 
                 (errmsg("failed to insert dimension metadata")));
     }
 }
