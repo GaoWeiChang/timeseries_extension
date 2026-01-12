@@ -47,6 +47,29 @@ CREATE DATABASE test_extension;
 ```
 
 ## Usage Guide
+### Creating hypertable
+```
+CREATE TABLE sensor_data (
+    time TIMESTAMPTZ NOT NULL,
+    sensor_id INTEGER,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION
+);
 
+SELECT create_hypertable('sensor_data', 'time', INTERVAL '1 day');
+```
 
+### Insert hypertable
+```
+INSERT INTO sensor_data VALUES ('2024-01-01 00:00:00+00'::timestamptz, 1, 25.5, 60.0);
+```
 
+### Drop hypertable
+```
+SELECT drop_hypertable('public.sensor_data');
+```
+
+### Show all functions
+```
+\df
+```
