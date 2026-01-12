@@ -134,13 +134,11 @@ create_hypertable(PG_FUNCTION_ARGS)
     interval_us = interval_to_microseconds(chunk_interval);
     if (interval_us >= USECS_PER_DAY)
     {
-        elog(NOTICE, "Chunk time interval: %ld day(s)",
-             interval_us / USECS_PER_DAY);
+        elog(NOTICE, "Chunk time interval: %ld day(s)", interval_us / USECS_PER_DAY);
     }
     else if (interval_us >= USECS_PER_HOUR)
     {
-        elog(NOTICE, "Chunk time interval: %ld hour(s)",
-             interval_us / USECS_PER_HOUR);
+        elog(NOTICE, "Chunk time interval: %ld hour(s)", interval_us / USECS_PER_HOUR);
     }
     else
     {

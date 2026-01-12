@@ -210,7 +210,7 @@ trigger_create_on_hypertable(const char *schema_name, const char *table_name)
     StringInfoData query;
     char trigger_name[NAMEDATALEN];
 
-    snprintf(trigger_name, NAMEDATALEN, "ts_insert_trigger");
+    snprintf(trigger_name, NAMEDATALEN, "before_insert_trigger");
 
     initStringInfo(&query);
     appendStringInfo(&query,
@@ -234,7 +234,7 @@ trigger_drop_on_hypertable(const char *schema_name, const char *table_name)
     StringInfoData query;
     char trigger_name[NAMEDATALEN];
 
-    snprintf(trigger_name, NAMEDATALEN, "ts_insert_trigger");
+    snprintf(trigger_name, NAMEDATALEN, "before_insert_trigger");
 
     initStringInfo(&query);
     appendStringInfo(&query,

@@ -165,6 +165,25 @@ END;
 $$ 
 LANGUAGE plpgsql;
 
+-- show all triggers
+CREATE FUNCTION display_all_triggers(    
+) RETURNS TABLE (table_name name, trigger_name name)
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        info.event_object_table::name as table_name,
+        info.trigger_name::name as trigger_name
+    FROM
+        information_schema.triggers as info
+    ORDER BY
+        info.event_object_table,
+        info.trigger_name;
+END;
+$$ 
+LANGUAGE plpgsql;
+
+
 -- ==========================================
 -- Test function for metadata system
 -- ==========================================

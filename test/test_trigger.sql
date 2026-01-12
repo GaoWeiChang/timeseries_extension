@@ -35,8 +35,7 @@ SELECT COUNT(*) FROM sensor_data;
 SELECT * FROM _hyper_1_1_chunk ORDER BY time;
 
 
-INSERT INTO sensor_data VALUES 
-    ('2024-01-02 10:00:00+00', 3, 28.0, 63.0);
+INSERT INTO sensor_data VALUES ('2024-01-02 10:00:00+00', 3, 28.0, 63.0);
 
 \echo 'Chunks created:'
 SELECT 
