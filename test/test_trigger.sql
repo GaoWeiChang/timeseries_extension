@@ -28,7 +28,7 @@ INSERT INTO sensor_data VALUES ('2024-01-02 10:00:00+00', 3, 28.0, 63.0);
 SELECT 
     id,
     table_name,
-    TO_TIMESTAMP(start_time::double precision / 1000000) AT TIME ZONE 'UTC' as start_time
+    TO_TIMESTAMP((start_time::double precision / 1000000) + 946684800) AT TIME ZONE 'UTC' as start_time
 FROM _timeseries_catalog.chunk
 ORDER BY id;
 
