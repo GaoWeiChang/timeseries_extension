@@ -25,9 +25,7 @@ chunk_get_next_number(int hypertable_id)
     initStringInfo(&query);
     appendStringInfo(&query,
         "SELECT COALESCE(COUNT(*), 0) + 1 FROM _timeseries_catalog.chunk "
-        "WHERE hypertable_id = %d",
-        hypertable_id);
-    
+        "WHERE hypertable_id = %d", hypertable_id);
     
     int ret = SPI_execute(query.data, true, 0);
     if (ret != SPI_OK_SELECT || SPI_processed == 0){
@@ -90,10 +88,11 @@ chunk_create_table(const char *hypertable_schema,
 {
     StringInfoData query;
     Oid chunk_oid;
+    char constraint_name[NAMEDATALEN];
 
     initStringInfo(&query);
     appendStringInfo(&query,
-        "CREATE TABLE %s.%s (LIKE %s.%s INCLUDING ALL) "
+        "CREATE TABLE IF NOT EXISTS %s.%s (LIKE %s.%s INCLUDING ALL) "
         "INHERITS (%s.%s)",
         chunk_schema, chunk_name, hypertable_schema, hypertable_name,
         hypertable_schema, hypertable_name);
@@ -107,8 +106,13 @@ chunk_create_table(const char *hypertable_schema,
     }
 
     chunk_oid = get_relname_relid(chunk_name, get_namespace_oid(chunk_schema, false));
+    if(chunk_oid != InvalidOid){
+        // elog(NOTICE, "Chunk table %s already exists (OID: %u)", chunk_name, chunk_oid);
+        return chunk_oid;
+    }
 
     // add constraint
+    snprintf(constraint_name, NAMEDATALEN, "%s_time_check", chunk_name);
     resetStringInfo(&query);
     appendStringInfo(&query,
         "ALTER TABLE %s.%s "
@@ -223,14 +227,17 @@ chunk_create(int hypertable_id, int64 time_point)
                                     chunk_start,
                                     chunk_end);
 
+    CommandCounterIncrement();
+
     chunk_id = metadata_insert_chunk(hypertable_id,
                                     hypertable_schema,
                                     chunk_name,
                                     chunk_start,
                                     chunk_end);
-    
-    ChunkInfo *info = (ChunkInfo *) palloc(sizeof(ChunkInfo));
 
+    CommandCounterIncrement();
+
+    ChunkInfo *info = (ChunkInfo *) palloc(sizeof(ChunkInfo));
     info->chunk_id = chunk_id;
     strcpy(info->schema_name, hypertable_schema);
     strcpy(info->table_name, chunk_name);

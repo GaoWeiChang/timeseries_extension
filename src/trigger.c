@@ -183,11 +183,9 @@ trigger_insert(PG_FUNCTION_ARGS)
     // fetch timestamp
     time_value = get_time_value_from_tuple(trigdata->tg_trigtuple, tupdesc, time_attnum);
     chunk_info = chunk_get_or_create(hypertable_id, time_value);
-    elog(NOTICE, "Using chunk_id: %d", chunk_info->chunk_id);
     
     // fetch chunk
     chunk_full_name = get_chunk_table_name(chunk_info->schema_name, chunk_info->table_name);
-    elog(NOTICE, "Target chunk: %s", chunk_full_name);
     
     // insert to chunk table
     insert_query = build_insert_query(chunk_full_name, tupdesc, trigdata->tg_trigtuple);
