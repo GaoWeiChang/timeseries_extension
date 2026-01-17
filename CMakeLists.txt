@@ -56,6 +56,7 @@ set(SOURCES
     src/hypertable.c
     src/chunk.c
     src/trigger.c
+    src/planner.c
 )
 
 # ===============================================

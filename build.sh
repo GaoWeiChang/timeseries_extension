@@ -25,7 +25,10 @@ echo ""
 echo "Installing"
 sudo make install
 
+# restart server
+systemctl restart postgresql
+
 echo ""
 echo "=========================================="
-echo "✅ Installation Complete"
+echo "✅ Build Complete"
 echo "=========================================="

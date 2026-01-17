@@ -89,6 +89,13 @@ chunk_create_table(const char *hypertable_schema,
     StringInfoData query;
     Oid chunk_oid;
     char constraint_name[NAMEDATALEN];
+    bool table_exists = false;
+
+    // check table exist
+    chunk_oid = get_relname_relid(chunk_name, get_namespace_oid(chunk_schema, false));
+    if(chunk_oid != InvalidOid){
+        return chunk_oid;
+    }
 
     initStringInfo(&query);
     appendStringInfo(&query,
@@ -105,24 +112,25 @@ chunk_create_table(const char *hypertable_schema,
         ereport(ERROR, (errmsg("failed to create chunk table \"%s\"", chunk_name)));
     }
 
-    chunk_oid = get_relname_relid(chunk_name, get_namespace_oid(chunk_schema, false));
-    if(chunk_oid != InvalidOid){
-        // elog(NOTICE, "Chunk table %s already exists (OID: %u)", chunk_name, chunk_oid);
-        return chunk_oid;
-    }
+    TimestampTz start_ts = start_time;
+    TimestampTz end_ts = end_time;
+    
+    char *start_str = DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(start_ts)));
+    char *end_str = DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(end_ts)));
 
     // add constraint
     snprintf(constraint_name, NAMEDATALEN, "%s_time_check", chunk_name);
     resetStringInfo(&query);
     appendStringInfo(&query,
         "ALTER TABLE %s.%s "
-        "ADD CONSTRAINT %s_time_check "
-        "CHECK (%s >= '2000-01-01 UTC'::timestamptz + '%ld microseconds'::interval "
-        "AND %s < '2000-01-01 UTC'::timestamptz + '%ld microseconds'::interval)",
+        "ADD CONSTRAINT %s "
+        "CHECK (%s >= '%s'::timestamptz AND %s < '%s'::timestamptz)",
         chunk_schema, chunk_name,
-        chunk_name,
-        time_column, start_time,
-        time_column, end_time);
+        constraint_name,
+        time_column, start_str,
+        time_column, end_str);
+
+    elog(NOTICE, "Adding constraint: %s", query.data);
 
     ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_UTILITY){
