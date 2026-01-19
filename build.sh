@@ -22,7 +22,7 @@ echo "Compiling..."
 
 # install
 echo ""
-echo "Installing"
+echo "Installing..."
 sudo make install
 
 # restart server

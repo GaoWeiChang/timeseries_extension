@@ -21,11 +21,13 @@ INSERT INTO sensor_data VALUES ('2024-01-04 09:00:00+00'::timestamptz, 3, 27.0, 
 INSERT INTO sensor_data VALUES ('2024-01-04 15:00:00+00'::timestamptz, 1, 25.5, 59.5);
 INSERT INTO sensor_data VALUES ('2024-01-05 11:00:00+00'::timestamptz, 2, 28.5, 63.5);
 
-
+-- ==========================================
+-- Test Pruning
+-- ==========================================
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM sensor_data
 WHERE time >= '2024-01-01' AND time < '2024-01-03';
--- output must scan only _hyper_1_1_chunk
+-- output must scan only _hyper_1_1_chunk and _hyper_1_2_chunk
 
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM sensor_data

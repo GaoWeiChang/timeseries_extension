@@ -54,7 +54,7 @@ timeseries_planner_hook(Query *parse,
             char *schema_name = get_namespace_name(get_rel_namespace(rte->relid));
             char *table_name = get_rel_name(rte->relid);
             
-            elog(DEBUG1, "Planner: Optimizing query on hypertable %s.%s", schema_name, table_name);
+            elog(LOG, "Planner: Optimizing query on hypertable %s.%s", schema_name, table_name);
         }
     }
 
