@@ -35,7 +35,6 @@ sudo apt-get install -y \
 # change to root user
 su
 ./build.sh
-systemctl restart postgresql
 
 # change to postgres user
 su - postgres
