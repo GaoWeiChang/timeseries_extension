@@ -19,7 +19,7 @@ is_hypertable_relation(RangeTblEntry *rte)
 {
     char *schema_name;
     char *table_name;
-    bool result;
+    bool result = false;
 
     if(rte->rtekind != RTE_RELATION){
         return false;
@@ -28,8 +28,15 @@ is_hypertable_relation(RangeTblEntry *rte)
     schema_name = get_namespace_name(get_rel_namespace(rte->relid));
     table_name = get_rel_name(rte->relid);
 
+    // avoid infinite recursion when planner check _timeseries_catalog
     if(strcmp(schema_name, "_timeseries_catalog") == 0){
         return false;
+    }
+
+    // check schema is dropped with extension
+    Oid catalog_schema_oid = get_namespace_oid("_timeseries_catalog", true);
+    if (catalog_schema_oid == InvalidOid){
+        return false; 
     }
 
     SPI_connect();
