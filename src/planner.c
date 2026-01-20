@@ -6,86 +6,34 @@
 #include <utils/lsyscache.h>
 #include <utils/timestamp.h>
 #include <utils/builtins.h>
+#include <utils/hsearch.h>
+#include <utils/inval.h>
 #include <executor/spi.h>
 #include <nodes/makefuncs.h>
 #include <parser/parsetree.h>
+#include <access/xact.h>
 
 #include "metadata.h"
 
 static planner_hook_type prev_planner_hook = NULL;
 
-static bool 
-is_hypertable_relation(RangeTblEntry *rte)
+typedef struct HypertableCacheKey
 {
-    char *schema_name;
-    char *table_name;
-    bool result = false;
+    Oid relid;
+} HypertableCacheKey;
 
-    if(rte->rtekind != RTE_RELATION){
-        return false;
-    }
-
-    schema_name = get_namespace_name(get_rel_namespace(rte->relid));
-    table_name = get_rel_name(rte->relid);
-
-    // avoid infinite recursion when planner check _timeseries_catalog
-    if(strcmp(schema_name, "_timeseries_catalog") == 0){
-        return false;
-    }
-
-    // check schema is dropped with extension
-    Oid catalog_schema_oid = get_namespace_oid("_timeseries_catalog", true);
-    if (catalog_schema_oid == InvalidOid){
-        return false; 
-    }
-
-    SPI_connect();
-    result = metadata_is_hypertable(schema_name, table_name);
-    SPI_finish();
-
-    return result;
-}
-
-static PlannedStmt *
-timeseries_planner_hook(Query *parse,
-                       const char *query_string,
-                       int cursorOptions,
-                       ParamListInfo boundParams)
+typedef struct HypertableCacheEntry
 {
-    PlannedStmt *result;
-    RangeTblEntry *rte;
+    Oid relid;
+    bool is_hypertable;
+    char schema_name[NAMEDATALEN];
+    char table_name[NAMEDATALEN];
+} HypertableCacheEntry;
 
-    if((parse->commandType == CMD_SELECT) && (list_length(parse->rtable) > 0)){
-        rte = (RangeTblEntry *) linitial(parse->rtable);
-        if (is_hypertable_relation(rte)){
-            char *schema_name = get_namespace_name(get_rel_namespace(rte->relid));
-            char *table_name = get_rel_name(rte->relid);
-            
-            elog(LOG, "Planner: Optimizing query on hypertable %s.%s", schema_name, table_name);
-        }
-    }
+static HTAB *hypertable_cache = NULL;
+static bool cache_valid = false;
 
-    if(prev_planner_hook){
-        result = prev_planner_hook(parse, query_string, cursorOptions, boundParams);
-    }
-    else{
-        result = standard_planner(parse, query_string, cursorOptions, boundParams);
-    }
-    
-    return result;
-}
+static void init_hypertable_cache(void);
+static void invalidate_cache_callback(XactEvent event, void *arg);
+static void rebuild_hypertable_cache(void);
 
-void
-planner_hook_init(void)
-{
-    prev_planner_hook = planner_hook;
-    planner_hook = timeseries_planner_hook;
-    elog(LOG, "Timeseries planner hook installed");
-}
-
-void
-planner_hook_cleanup(void)
-{
-    planner_hook = prev_planner_hook;
-    elog(LOG, "Timeseries planner hook removed");
-}
