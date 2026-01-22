@@ -13,6 +13,7 @@
 #include "metadata.h"
 #include "trigger.h"
 #include "chunk.h"
+#include "planner.h"
 
 #define USECS_PER_DAY INT64CONST(86400000000)
 #define USECS_PER_HOUR INT64CONST(3600000000)
@@ -158,6 +159,8 @@ create_hypertable(PG_FUNCTION_ARGS)
     table_close(rel, AccessExclusiveLock);
     elog(NOTICE, "✅ Successfully converted \"%s.%s\" to hypertable", schema_name, table_name);
     SPI_finish();
+
+    planner_invalidate_cache(); // set invalid cache, after commit
     
     PG_RETURN_VOID();
 }
@@ -191,5 +194,7 @@ drop_hypertable(PG_FUNCTION_ARGS)
     elog(NOTICE, "✅ Successfully dropped hypertable \"%s.%s\"", schema_name, table_name);
     SPI_finish();
     
+    planner_invalidate_cache(); // set invalid cache, after commit
+
     PG_RETURN_VOID();
 }
