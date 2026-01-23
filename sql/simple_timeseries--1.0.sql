@@ -183,41 +183,6 @@ END;
 $$ 
 LANGUAGE plpgsql;
 
-
--- ==========================================
--- Test function for metadata system
--- ==========================================
-
--- test create hypertable
-CREATE FUNCTION test_create_hypertable_metadata(
-    schema_name text,
-    table_name text,
-    time_column_name text,
-    time_column_type regtype,
-    interval_microseconds bigint
-) RETURNS integer
-AS 'MODULE_PATHNAME', 'test_create_hypertable_metadata'
-LANGUAGE C STRICT;
-
--- test create chunk
-CREATE FUNCTION test_create_chunk_metadata(
-    hypertable_id integer,
-    schema_name text,
-    table_name text,
-    start_time bigint,
-    end_time bigint
-) RETURNS integer
-AS 'MODULE_PATHNAME', 'test_create_chunk_metadata'
-LANGUAGE C STRICT;
-
--- test find chunk
-CREATE FUNCTION test_find_chunk(
-    hypertable_id integer,
-    time_microseconds bigint
-) RETURNS integer
-AS 'MODULE_PATHNAME', 'test_find_chunk'
-LANGUAGE C STRICT;
-
 -- ==========================================
 -- hypertable.c
 -- ==========================================
@@ -237,46 +202,6 @@ CREATE FUNCTION drop_hypertable(
 ) RETURNS VOID
 AS 'MODULE_PATHNAME', 'drop_hypertable'
 LANGUAGE C STRICT;
-
--- ==========================================
--- CHUNK MANAGEMENT FUNCTIONS
--- ==========================================
-
--- build chunk
-CREATE FUNCTION test_create_chunk(
-    hypertable_id INTEGER,
-    time_value TIMESTAMPTZ
-)
-RETURNS INTEGER
-AS 'MODULE_PATHNAME', 'test_create_chunk'
-LANGUAGE C STRICT;
-
-COMMENT ON FUNCTION test_create_chunk(INTEGER, TIMESTAMPTZ) IS 
-    'Create a chunk for the given timestamp (for testing)';
-
--- find chunk for timestamp
-CREATE FUNCTION test_find_chunk_for_time(
-    hypertable_id INTEGER,
-    time_value TIMESTAMPTZ
-)
-RETURNS INTEGER
-AS 'MODULE_PATHNAME', 'test_find_chunk_for_time'
-LANGUAGE C STRICT;
-
-COMMENT ON FUNCTION test_find_chunk_for_time(INTEGER, TIMESTAMPTZ) IS 
-    'Find chunk that covers the given timestamp';
-
--- find or build chunk
-CREATE FUNCTION test_get_or_create_chunk(
-    hypertable_id INTEGER,
-    time_value TIMESTAMPTZ
-)
-RETURNS INTEGER
-AS 'MODULE_PATHNAME', 'test_get_or_create_chunk'
-LANGUAGE C STRICT;
-
-COMMENT ON FUNCTION test_get_or_create_chunk(INTEGER, TIMESTAMPTZ) IS 
-    'Get existing chunk or create new one for the given timestamp';
 
 -- ==========================================
 -- TRIGGER FUNCTIONS
