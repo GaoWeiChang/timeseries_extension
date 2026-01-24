@@ -25,7 +25,7 @@ echo ""
 echo "Installing..."
 sudo make install
 
-# restart server
+# restart postgresql server
 echo ""
 echo "Restarting Postgresql..."
 systemctl restart postgresql
