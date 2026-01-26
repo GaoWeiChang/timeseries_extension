@@ -11,11 +11,136 @@
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/timestamp.h>
+#include <utils/memutils.h>
+#include <utils/hsearch.h>
 #include <executor/spi.h>
 
 #include "metadata.h"
 #include "chunk.h"
 
+/*
+ * Chunk cache management
+ */
+static HTAB *chunk_cache = NULL;
+static MemoryContext chunk_cache_context = NULL;
+static bool xact_callback_registered = false;
+
+// reset pointer when transaction finished
+static void
+chunk_cache_xact_callback(XactEvent event, void *arg)
+{
+    switch(event){
+        case XACT_EVENT_COMMIT:
+        case XACT_EVENT_ABORT:
+            // reset pointer
+            chunk_cache = NULL;
+            chunk_cache_context = NULL;
+            elog(DEBUG1, "Chunk cache reset");
+            break;
+        default:
+            break;
+    }
+}
+
+// find chunk in cache
+static ChunkInfo*
+chunk_cache_search(int hypertable_id, int64 chunk_start)
+{
+    ChunkCacheKey key;
+    ChunkCacheEntry *entry;
+    bool found;
+
+    if (chunk_cache == NULL) return NULL;
+
+    key.hypertable_id = hypertable_id;
+    key.chunk_start = chunk_start;
+
+    entry = (ChunkCacheEntry *) hash_search(
+        chunk_cache,
+        &key,
+        HASH_FIND,
+        &found
+    );
+    
+    if(found){
+        elog(NOTICE, "cache hit: hypertable=%d", hypertable_id);
+        return &entry->info;
+    }
+
+    elog(NOTICE, "cache miss: hypertable=%d", hypertable_id);
+    return NULL;
+}
+
+static void
+chunk_cache_insert(int hypertable_id, int64 chunk_start, ChunkInfo *info)
+{
+    ChunkCacheKey key;
+    ChunkCacheEntry *entry;
+    bool found;
+
+    if(chunk_cache == NULL){
+        chunk_cache_init();
+    }
+
+    key.hypertable_id = hypertable_id;
+    key.chunk_start = chunk_start;
+    
+    // search
+    entry = (ChunkCacheEntry *) hash_search(
+        chunk_cache,
+        &key,
+        HASH_ENTER,
+        &found
+    );
+
+    // copy to cache entry
+    entry->key = key;
+    memcpy(&entry->info, info, sizeof(ChunkInfo));
+    elog(DEBUG1, "Chunk cache INSERT: hypertable=%d, start=%ld, chunk=%s",
+        hypertable_id, chunk_start, info->table_name);
+}
+
+void
+chunk_cache_init(void)
+{
+    HASHCTL ctl;
+    
+    if (chunk_cache != NULL) return;
+
+    /*
+    * when transaction finish memory will get destroy,
+    * to avoid dangling pointer for next transaction, we need to reset pointer to NULL
+    */  
+    if(!xact_callback_registered){
+        RegisterXactCallback(chunk_cache_xact_callback, NULL); // reset pointer
+        xact_callback_registered = true;
+    }
+
+    // memory context for cache, it will reset when transaction finish
+    chunk_cache_context = AllocSetContextCreate(
+        CurTransactionContext,  // chained with current transaction
+        "ChunkCache",
+        ALLOCSET_DEFAULT_SIZES
+    );
+
+    memset(&ctl, 0, sizeof(ctl));
+    ctl.keysize = sizeof(ChunkCacheKey);
+    ctl.entrysize = sizeof(ChunkCacheEntry);
+    ctl.hcxt = chunk_cache_context;
+
+    chunk_cache = hash_create(
+        "Chunk Cache",
+        64, 
+        &ctl,
+        HASH_ELEM | HASH_BLOBS | HASH_CONTEXT
+    );
+
+    // elog(NOTICE, "Chunk cache initialized");
+}
+
+/*
+ * Private fucntion
+ */
 static int
 chunk_get_next_number(int hypertable_id)
 {
@@ -24,12 +149,11 @@ chunk_get_next_number(int hypertable_id)
 
     initStringInfo(&query);
     appendStringInfo(&query,
-        "SELECT COALESCE(COUNT(*), 0) + 1 FROM _timeseries_catalog.chunk "
+        "SELECT COALESCE(MAX(id), 0) + 1 FROM _timeseries_catalog.chunk "
         "WHERE hypertable_id = %d", hypertable_id);
     
-    int ret = SPI_execute(query.data, true, 0);
+    int ret = SPI_execute(query.data, false, 0);
     if (ret != SPI_OK_SELECT || SPI_processed == 0){
-        SPI_finish();
         ereport(ERROR, errmsg("failed to get next chunk number"));
     }
     
@@ -87,12 +211,14 @@ chunk_create_table(const char *hypertable_schema,
                    int64 end_time)
 {
     StringInfoData query;
+    Oid schema_oid;
     Oid chunk_oid;
     char constraint_name[NAMEDATALEN];
-    bool table_exists = false;
+
+    schema_oid = get_namespace_oid(chunk_schema, false);
 
     // check table exist
-    chunk_oid = get_relname_relid(chunk_name, get_namespace_oid(chunk_schema, false));
+    chunk_oid = get_relname_relid(chunk_name, schema_oid);
     if(chunk_oid != InvalidOid){
         return chunk_oid;
     }
@@ -108,9 +234,11 @@ chunk_create_table(const char *hypertable_schema,
     // create inherit table
     int ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_UTILITY){
-        SPI_finish();
         ereport(ERROR, (errmsg("failed to create chunk table \"%s\"", chunk_name)));
     }
+
+    CommandCounterIncrement();
+    chunk_oid = get_relname_relid(chunk_name, schema_oid);
 
     TimestampTz start_ts = start_time;
     TimestampTz end_ts = end_time;
@@ -130,17 +258,17 @@ chunk_create_table(const char *hypertable_schema,
         time_column, start_str,
         time_column, end_str);
 
-    elog(NOTICE, "Adding constraint: %s", query.data);
-
     ret = SPI_execute(query.data, false, 0);
     if(ret != SPI_OK_UTILITY){
-        SPI_finish();
         ereport(ERROR, errmsg("failed to add time constraint to chunk \"%s\"", chunk_name));
     }
 
     return chunk_oid;
 }
 
+/*
+ * Public fucntion
+ */
 int64 
 chunk_calculate_start(int64 time_point, int64 chunk_interval)
 {
@@ -251,6 +379,8 @@ chunk_create(int hypertable_id, int64 time_point)
     strcpy(info->table_name, chunk_name);
     info->start_time = chunk_start;
     info->end_time = chunk_end;
+
+    chunk_cache_insert(hypertable_id, chunk_start, info);
     
     elog(NOTICE, "✅ Chunk %d created successfully (OID: %u)", info->chunk_id, chunk_oid);
     return info;
@@ -259,12 +389,39 @@ chunk_create(int hypertable_id, int64 time_point)
 ChunkInfo* 
 chunk_get_or_create(int hypertable_id, int64 timestamp)
 {
+    int64 chunk_interval;
+    int64 chunk_start;
+    int64 lock_key;
+    ChunkInfo *cached_info;
     int chunk_id;
-    chunk_id = metadata_find_chunk(hypertable_id, timestamp);
 
-    if(chunk_id != -1){
-        return chunk_get_info(chunk_id);
+    if (chunk_cache == NULL){
+        chunk_cache_init();
     }
 
+    // calculate chunk start
+    chunk_interval = metadata_get_chunk_interval(hypertable_id);
+    if (chunk_interval == -1) {
+        ereport(ERROR, errmsg("invalid chunk interval for hypertable %d", hypertable_id));
+    }
+    chunk_start = chunk_calculate_start(timestamp, chunk_interval);
+
+    // search inside cache
+    cached_info = chunk_cache_search(hypertable_id, chunk_start);
+    if(cached_info != NULL){
+        ChunkInfo *result = (ChunkInfo *) palloc(sizeof(ChunkInfo));
+        memcpy(result, cached_info, sizeof(ChunkInfo)); // save in cache
+        return result;
+    }
+
+    // search inside database
+    chunk_id = metadata_find_chunk(hypertable_id, timestamp);
+    if(chunk_id != -1){
+        ChunkInfo *info = chunk_get_info(chunk_id);
+        chunk_cache_insert(hypertable_id, chunk_start, info);
+        return info;
+    }
+
+    // elog(NOTICE, "create chunk");
     return chunk_create(hypertable_id, timestamp);
 }
