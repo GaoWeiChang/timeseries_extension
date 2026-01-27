@@ -63,11 +63,11 @@ chunk_cache_search(int hypertable_id, int64 chunk_start)
     );
     
     if(found){
-        elog(NOTICE, "cache hit: hypertable=%d", hypertable_id);
+        // elog(NOTICE, "cache hit: hypertable=%d", hypertable_id);
         return &entry->info;
     }
 
-    elog(NOTICE, "cache miss: hypertable=%d", hypertable_id);
+    // elog(NOTICE, "cache miss: hypertable=%d", hypertable_id);
     return NULL;
 }
 
@@ -161,44 +161,6 @@ chunk_get_next_number(int hypertable_id)
     chunk_number = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     
     return chunk_number;
-}
-
-static ChunkInfo*
-chunk_get_info(int chunk_id)
-{
-    StringInfoData query;
-    int ret;
-    bool isnull;
-    Datum datum;
-    ChunkInfo *info;
-
-    initStringInfo(&query);
-    appendStringInfo(&query, 
-        "SELECT schema_name, table_name, start_time, end_time "
-        "FROM _timeseries_catalog.chunk "
-        "WHERE id = %d", chunk_id);
-    
-    ret = SPI_execute(query.data, true, 0);
-    if (ret != SPI_OK_SELECT || SPI_processed == 0){
-        ereport(ERROR, errmsg("chunk with id %d not found", chunk_id));
-    }
-
-    info = (ChunkInfo *) palloc(sizeof(ChunkInfo));
-    info->chunk_id = chunk_id;
-
-    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
-    strncpy(info->schema_name, TextDatumGetCString(datum), NAMEDATALEN);
-    
-    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
-    strncpy(info->table_name, TextDatumGetCString(datum), NAMEDATALEN);
-    
-    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 3, &isnull);
-    info->start_time = DatumGetInt64(datum);
-    
-    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 4, &isnull);
-    info->end_time = DatumGetInt64(datum);
-
-    return info;
 }
 
 static Oid 
@@ -303,6 +265,43 @@ chunk_drop_all_chunk(const char *schema_name, const char *table_name)
     elog(NOTICE, "Dropped chunk table %s.%s", schema_name, table_name);
 }
 
+ChunkInfo*
+chunk_get_info(int chunk_id)
+{
+    StringInfoData query;
+    int ret;
+    bool isnull;
+    Datum datum;
+    ChunkInfo *info;
+
+    initStringInfo(&query);
+    appendStringInfo(&query, 
+        "SELECT schema_name, table_name, start_time, end_time "
+        "FROM _timeseries_catalog.chunk "
+        "WHERE id = %d", chunk_id);
+    
+    ret = SPI_execute(query.data, true, 0);
+    if (ret != SPI_OK_SELECT || SPI_processed == 0){
+        ereport(ERROR, errmsg("chunk with id %d not found", chunk_id));
+    }
+
+    info = (ChunkInfo *) palloc(sizeof(ChunkInfo));
+    info->chunk_id = chunk_id;
+
+    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+    strncpy(info->schema_name, TextDatumGetCString(datum), NAMEDATALEN);
+    
+    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
+    strncpy(info->table_name, TextDatumGetCString(datum), NAMEDATALEN);
+    
+    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 3, &isnull);
+    info->start_time = DatumGetInt64(datum);
+    
+    datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 4, &isnull);
+    info->end_time = DatumGetInt64(datum);
+
+    return info;
+}
 
 ChunkInfo* 
 chunk_create(int hypertable_id, int64 time_point)

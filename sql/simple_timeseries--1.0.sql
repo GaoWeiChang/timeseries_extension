@@ -53,6 +53,8 @@ CREATE TABLE _timeseries_catalog.chunk (
     start_time BIGINT NOT NULL,                
     end_time BIGINT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    compressed BOOLEAN DEFAULT false,
+    compressed_at TIMESTAMPTZ,
     
     UNIQUE(schema_name, table_name),
     CHECK(end_time > start_time)
@@ -184,7 +186,7 @@ $$
 LANGUAGE plpgsql;
 
 -- ==========================================
--- hypertable.c
+-- HYPERTABLE FUNCTIONS
 -- ==========================================
 
 -- create hypertable
@@ -210,3 +212,43 @@ CREATE FUNCTION trigger_insert()
 RETURNS TRIGGER
 AS 'MODULE_PATHNAME', 'trigger_insert'
 LANGUAGE C;
+
+-- ==========================================
+-- COMPRESSION FUNCTIONS
+-- ==========================================
+-- ALTER TABLE _timeseries_catalog.chunk 
+-- ADD COLUMN IF NOT EXISTS compressed BOOLEAN DEFAULT false,
+-- ADD COLUMN IF NOT EXISTS compressed_at TIMESTAMPTZ;
+
+-- compress specific chunk
+CREATE FUNCTION compress_chunk(
+    chunk_id INTEGER
+)
+RETURNS BOOLEAN
+AS 'MODULE_PATHNAME', 'compress_chunk'
+LANGUAGE C STRICT;
+
+-- decompress specific chunk
+CREATE FUNCTION decompress_chunk(
+    chunk_id INTEGER
+)
+RETURNS BOOLEAN
+AS 'MODULE_PATHNAME', 'decompress_chunk'
+LANGUAGE C STRICT;
+
+-- compress chunk that older than interval
+CREATE FUNCTION compress_chunks_older_than(
+    table_name TEXT,
+    older_than INTERVAL
+)
+RETURNS INTEGER
+AS 'MODULE_PATHNAME', 'compress_chunks_older_than'
+LANGUAGE C STRICT;
+
+-- Show compression statistics
+CREATE FUNCTION show_chunk_compression_stats(
+    table_name TEXT
+)
+RETURNS TEXT
+AS 'MODULE_PATHNAME', 'show_chunk_compression_stats'
+LANGUAGE C STRICT;

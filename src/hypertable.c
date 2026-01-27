@@ -18,6 +18,10 @@
 #define USECS_PER_DAY INT64CONST(86400000000)
 #define USECS_PER_HOUR INT64CONST(3600000000)
 
+
+/*
+* Private function
+*/
 static int64
 interval_to_microseconds(Interval *interval)
 {
@@ -85,8 +89,7 @@ validate_table_for_hypertable(Relation rel)
 
         ereport(ERROR,
                 (errcode(ERRCODE_WRONG_OBJECT_TYPE),
-                errmsg("\"%s\" is a %s, not a regular table",
-                    RelationGetRelationName(rel), relkind_str)));
+                errmsg("\"%s\" is a %s, not a regular table", RelationGetRelationName(rel), relkind_str)));
     }
 
     // check duplicate hypertable
@@ -97,6 +100,9 @@ validate_table_for_hypertable(Relation rel)
     }
 }
 
+/*
+* Top level function
+*/
 PG_FUNCTION_INFO_V1(create_hypertable);
 Datum
 create_hypertable(PG_FUNCTION_ARGS)

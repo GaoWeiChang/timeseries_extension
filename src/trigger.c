@@ -14,8 +14,9 @@
 #include "metadata.h"
 #include "chunk.h"
 
-/* Private Functions */
-
+/* 
+* Private Functions 
+*/
 static int64
 get_time_value_from_tuple(HeapTuple tuple, TupleDesc tupdesc, AttrNumber time_attnum)
 {
@@ -96,8 +97,9 @@ build_insert_query(const char *chunk_table, TupleDesc tupdesc, HeapTuple tuple)
     return query.data;
 }
 
-/* Top-level Functions */
-
+/* 
+* Top-level Functions 
+*/
 PG_FUNCTION_INFO_V1(trigger_insert);
 Datum
 trigger_insert(PG_FUNCTION_ARGS)
@@ -200,8 +202,9 @@ trigger_insert(PG_FUNCTION_ARGS)
     return PointerGetDatum(NULL);  // since it already inserted at chunk, no need to insert again
 }
 
-/* Public Functions */
-
+/* 
+* Public Functions 
+*/
 void
 trigger_create_on_hypertable(const char *schema_name, const char *table_name)
 {
