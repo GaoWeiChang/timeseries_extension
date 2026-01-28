@@ -43,6 +43,9 @@ psql -U postgres
 # create database and switch
 CREATE DATABASE test_extension;
 \c test_extension
+
+# add extension
+CREATE EXTENSION simple_timeseries
 ```
 
 ## Usage Guide
