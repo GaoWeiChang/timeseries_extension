@@ -58,6 +58,7 @@ set(SOURCES
     src/trigger.c
     src/planner.c
     src/compression.c
+    src/dictionary.c
 )
 
 # ===============================================

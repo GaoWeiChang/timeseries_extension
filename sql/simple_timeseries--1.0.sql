@@ -252,3 +252,24 @@ CREATE FUNCTION show_chunk_compression_stats(
 RETURNS TEXT
 AS 'MODULE_PATHNAME', 'show_chunk_compression_stats'
 LANGUAGE C STRICT;
+
+
+-- ==========================================
+-- DICTIONARY ENCODING
+-- ==========================================
+
+CREATE FUNCTION test_compress_chunk_column(
+    table_name TEXT,
+    column_name TEXT
+)
+RETURNS BOOLEAN
+AS 'MODULE_PATHNAME', 'test_compress_chunk_column'
+LANGUAGE C STRICT;
+
+
+CREATE FUNCTION show_compression_info(
+    table_name TEXT
+)
+RETURNS TEXT
+AS 'MODULE_PATHNAME', 'show_compression_info'
+LANGUAGE C STRICT;

@@ -219,8 +219,7 @@ is_hypertable_relation(RangeTblEntry *rte)
                                                 &found);
 
     if (found && entry->is_hypertable){
-        elog(LOG, "Cache hit: %s.%s is a hypertable", 
-             entry->schema_name, entry->table_name);
+        // elog(LOG, "Cache hit: %s.%s is a hypertable", entry->schema_name, entry->table_name);
         return true;
     }
 
