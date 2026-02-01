@@ -109,8 +109,6 @@ compress_chunk_column(const char *schema_name,
     StringInfoData query;
     CompressedColumn *compressed = NULL;
 
-    SPI_connect();
-
     // get column data
     initStringInfo(&query);
     appendStringInfo(&query,
@@ -139,8 +137,6 @@ compress_chunk_column(const char *schema_name,
     } else {
         elog(WARNING, "  Column %s (type %u): No compression algorithm implemented yet", column_name, column_type);
     }
-
-    SPI_finish();
 
     return compressed;
 }
@@ -185,8 +181,6 @@ test_compress_chunk_column(PG_FUNCTION_ARGS)
     bool isnull;
     column_type = DatumGetObjectId(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     
-    SPI_finish();
-
     // compress column
     compressed = compress_chunk_column(schema_name, table_name, column_name, column_type);
 
@@ -200,6 +194,7 @@ test_compress_chunk_column(PG_FUNCTION_ARGS)
         elog(NOTICE, "   First value (decompressed): %s",
              TextDatumGetCString(PointerGetDatum(decompressed[0])));
     }
+    SPI_finish();
 
     PG_RETURN_BOOL(compressed != NULL);
 }
@@ -238,13 +233,6 @@ show_compression_info(PG_FUNCTION_ARGS)
         
         for (uint64 i = 0; i < SPI_processed; i++)
         {
-            // bool isnull;
-            // Datum col_name = SPI_getvalue(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
-            // Datum col_type = SPI_getvalue(SPI_tuptable->vals[i],SPI_tuptable->tupdesc, 2, &isnull);
-            
-            // char *name = TextDatumGetCString(col_name);
-            // char *type = TextDatumGetCString(col_type);
-
             char *name = SPI_getvalue(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1);
             char *type = SPI_getvalue(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2);
             
