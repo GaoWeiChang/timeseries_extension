@@ -273,3 +273,16 @@ CREATE FUNCTION show_compression_info(
 RETURNS TEXT
 AS 'MODULE_PATHNAME', 'show_compression_info'
 LANGUAGE C STRICT;
+
+
+-- ==========================================
+-- DELTA ENCODING
+-- ==========================================
+
+CREATE FUNCTION test_compress_delta(
+    table_name TEXT,
+    column_name TEXT
+)
+RETURNS BOOLEAN
+AS 'MODULE_PATHNAME', 'test_compress_delta'
+LANGUAGE C STRICT;

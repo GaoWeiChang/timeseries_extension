@@ -8,8 +8,6 @@ CREATE TABLE sensor_data (
     value DOUBLE PRECISION
 );
 
-SELECT create_hypertable('sensor_data', 'time', INTERVAL '1 day');
-
 INSERT INTO sensor_data
 SELECT 
     '2024-01-01'::timestamptz + (i || ' minutes')::interval,

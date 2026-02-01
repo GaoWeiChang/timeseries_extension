@@ -59,6 +59,7 @@ set(SOURCES
     src/planner.c
     src/compression.c
     src/dictionary.c
+    src/delta.c
 )
 
 # ===============================================
