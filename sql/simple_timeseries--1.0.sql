@@ -286,3 +286,16 @@ CREATE FUNCTION test_compress_delta(
 RETURNS BOOLEAN
 AS 'MODULE_PATHNAME', 'test_compress_delta'
 LANGUAGE C STRICT;
+
+
+-- ==========================================
+-- DELTA-OF-DELTA ENCODING
+-- ==========================================
+
+CREATE FUNCTION test_compress_dod(
+    table_name TEXT,
+    column_name TEXT
+)
+RETURNS BOOLEAN
+AS 'MODULE_PATHNAME', 'test_compress_dod'
+LANGUAGE C STRICT;
