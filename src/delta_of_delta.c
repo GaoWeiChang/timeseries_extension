@@ -1,23 +1,18 @@
 #include <postgres.h>
 #include <fmgr.h>
 #include <executor/spi.h>
-#include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <utils/builtins.h>
 #include <utils/timestamp.h>
 #include <utils/lsyscache.h>
 #include <funcapi.h>
+#include <string.h>
+#include <limits.h>
 
-typedef struct DodCompressed
-{
-    char column_name[NAMEDATALEN];
-    int64  base_timestamp;
-    int64  first_delta;      // timestamps[1] - timestamps[0] 
-    int64 *dod;              // length = num_rows - 2 (หา delta หนึ่งครั้ง เสียหนึ่งตัว หา delta อีกครั้ง เสียอีกหนึ่งตัว)  
-    int32  num_rows;
-} DodCompressed;
+#include "delta_of_delta.h"
 
-static DodCompressed *
+
+DodCompressed *
 compress_timestamp_column_with_dod(const char *column_name,
                                    int64 *timestamps,
                                    int32 num_rows)
@@ -64,40 +59,28 @@ compress_timestamp_column_with_dod(const char *column_name,
         if(diff > max_dod) max_dod = diff;
         if(diff == 0) zero_count+=1;
     }
-
-    // report
-    elog(NOTICE, "Delta-of-Delta: %s", column_name);
-    elog(NOTICE, "Rows: %d", num_rows);
-    elog(NOTICE, "Base timestamp: %ld", compressed->base_timestamp);
-    elog(NOTICE, "First delta: %ld µs", compressed->first_delta);
-    elog(NOTICE, "DoD min: %ld", min_dod);
-    elog(NOTICE, "DoD max: %ld", max_dod);
-    elog(NOTICE, "DoD zeros: %ld / %d (%.1f%%)",
-                            zero_count, num_rows - 2,
-                            (double)zero_count / (num_rows - 2) * 100.0);
-    
-    {
-        int bytes_per_dod;
-        if (min_dod >= -32768 && max_dod <= 32767)
-            bytes_per_dod = 2;
-        else if (min_dod >= -2147483648LL && max_dod <= 2147483647LL)
-            bytes_per_dod = 4;
-        else
-            bytes_per_dod = 8;
-
-        int64  original_size   = (int64)num_rows * 8;
-        int64  compressed_size = 8 + 8 + ((int64)(num_rows - 2) * bytes_per_dod);  // base + first delta + dod array
-        double ratio = (1.0 - (double)compressed_size / (double)original_size) * 100.0;
-
-        elog(NOTICE, "DoD fits in: int%d (%d bytes each)", bytes_per_dod * 8, bytes_per_dod);
-        elog(NOTICE, "Compression: %.1f%% (estimate)", ratio);
-    }
-
     pfree(deltas);
+    
+
+    int bytes_per_dod;
+    if (min_dod >= -32768 && max_dod <= 32767)
+        bytes_per_dod = 2;
+    else if (min_dod >= -2147483648LL && max_dod <= 2147483647LL)
+        bytes_per_dod = 4;
+    else
+        bytes_per_dod = 8;
+
+    int64  original_size   = (int64)num_rows * 8;
+    int64  compressed_size = 8 + 8 + ((int64)(num_rows - 2) * bytes_per_dod);  // base + first delta + dod array
+    double ratio = (1.0 - (double)compressed_size / (double)original_size) * 100.0;
+
+    elog(NOTICE, "DoD fits in: int%d (%d bytes each)", bytes_per_dod * 8, bytes_per_dod);
+    elog(NOTICE, "Compression: %.1f%% (estimate)", ratio);
+
     return compressed;
 }
 
-static int64 *
+int64 *
 decompress_timestamp_column_from_dod(DodCompressed *compressed)
 {
     int64 *timestamps;
@@ -122,85 +105,42 @@ decompress_timestamp_column_from_dod(DodCompressed *compressed)
     return timestamps;
 }
 
-
-PG_FUNCTION_INFO_V1(test_compress_dod);
-Datum
-test_compress_dod(PG_FUNCTION_ARGS)
+bytea *
+dod_serialise(DodCompressed *c)
 {
-    text *table_name_text  = PG_GETARG_TEXT_PP(0);
-    text *column_name_text = PG_GETARG_TEXT_PP(1);
+    int32 n_dod = (c->num_rows > 2) ? c->num_rows - 2 : 0;
+    int32 total = 4 + 8 + 8 + (n_dod * (int32)sizeof(int64));
+    bytea *out = (bytea *) palloc(VARHDRSZ + total);
+    char *p;
 
-    char *table_name  = text_to_cstring(table_name_text);
-    char *column_name = text_to_cstring(column_name_text);
-    char *schema_name = "public";
+    SET_VARSIZE(out, VARHDRSZ + total);
+    p = VARDATA(out);
 
-    StringInfoData   query;
-    int64           *original_ts;
-    int32            num_rows;
-    DodCompressed   *compressed;
-    int64           *decompressed_ts;
-    bool             all_match = true;
-    
-    elog(NOTICE, "=== Delta-of-Delta Test: %s.%s ===", table_name, column_name);
-
-    // read column
-    SPI_connect();
-
-    initStringInfo(&query);
-    appendStringInfo(&query,
-        "SELECT %s FROM %s.%s ORDER BY ctid",
-        quote_identifier(column_name),
-        quote_identifier(schema_name),
-        quote_identifier(table_name));
-    
-    int ret = SPI_execute(query.data, true, 0);
-    if (ret != SPI_OK_SELECT || SPI_processed == 0){
-        SPI_finish();
-        ereport(ERROR, (errmsg("no data in %s.%s", table_name, column_name)));
+    memcpy(p, &c->num_rows, 4); p += 4;
+    memcpy(p, &c->base_timestamp, 8); p += 8;
+    memcpy(p, &c->first_delta, 8); p += 8;
+    if (n_dod > 0){
+        memcpy(p, c->dod, n_dod * sizeof(int64));
     }
 
-    num_rows = (int32) SPI_processed;
-    original_ts = (int64 *) palloc(num_rows * sizeof(int64));
-    for (int32 i = 0; i < num_rows; i++){
-        bool isnull;
-        Datum val = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
-        original_ts[i] = isnull ? 0 : DatumGetInt64(val);
+    return out;
+}
+
+DodCompressed *
+dod_deserialise(bytea *data)
+{
+    DodCompressed *c = (DodCompressed *) palloc0(sizeof(DodCompressed));
+    char *p = VARDATA(data);
+
+    memcpy(&c->num_rows, p, 4); p += 4;
+    memcpy(&c->base_timestamp, p, 8); p += 8;
+    memcpy(&c->first_delta, p, 8); p += 8;
+
+    int32 n_dod = (c->num_rows > 2) ? c->num_rows - 2 : 0;
+    if(n_dod > 0){
+        c->dod = (int64 *) palloc(n_dod * sizeof(int64));
+        memcpy(c->dod, p, n_dod * sizeof(int64));
     }
     
-    SPI_finish();
-
-    // compress
-    elog(NOTICE, "Compressing %d rows...", num_rows);
-    compressed = compress_timestamp_column_with_dod(column_name, original_ts, num_rows);
-
-    // decompress
-    elog(NOTICE, "Decompressing...");
-    decompressed_ts = decompress_timestamp_column_from_dod(compressed);
-
-    //verify
-    for (int32 i = 0; i < num_rows; i++){
-        if (original_ts[i] != decompressed_ts[i])
-        {
-            elog(NOTICE, "  ❌ MISMATCH at row %d: original=%ld, decompressed=%ld",
-                 i, original_ts[i], decompressed_ts[i]);
-            all_match = false;
-        }
-    }
-
-    if (all_match){
-        elog(NOTICE, "✅ Verification passed! All %d timestamps match.", num_rows);
-        elog(NOTICE, "   First 5 original:     ");
-        for (int32 i = 0; i < 5 && i < num_rows; i++)
-            elog(NOTICE, "     [%d] = %ld  (%s)",
-                 i, original_ts[i], timestamptz_to_str((TimestampTz)original_ts[i]));
-        elog(NOTICE, "   First 5 decompressed: ");
-        for (int32 i = 0; i < 5 && i < num_rows; i++)
-            elog(NOTICE, "     [%d] = %ld  (%s)",
-                 i, decompressed_ts[i], timestamptz_to_str((TimestampTz)decompressed_ts[i]));
-    }
-    else{
-        elog(NOTICE, "❌ Verification FAILED!");
-    }
-
-    PG_RETURN_BOOL(all_match);
+    return c;       
 }

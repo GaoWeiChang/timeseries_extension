@@ -253,49 +253,14 @@ RETURNS TEXT
 AS 'MODULE_PATHNAME', 'show_chunk_compression_stats'
 LANGUAGE C STRICT;
 
-
 -- ==========================================
--- DICTIONARY ENCODING
+-- COMPRESSION: compressed_columns metadata
 -- ==========================================
-
-CREATE FUNCTION test_compress_chunk_column(
-    table_name TEXT,
-    column_name TEXT
-)
-RETURNS BOOLEAN
-AS 'MODULE_PATHNAME', 'test_compress_chunk_column'
-LANGUAGE C STRICT;
-
-
-CREATE FUNCTION show_compression_info(
-    table_name TEXT
-)
-RETURNS TEXT
-AS 'MODULE_PATHNAME', 'show_compression_info'
-LANGUAGE C STRICT;
-
-
--- ==========================================
--- DELTA ENCODING
--- ==========================================
-
-CREATE FUNCTION test_compress_delta(
-    table_name TEXT,
-    column_name TEXT
-)
-RETURNS BOOLEAN
-AS 'MODULE_PATHNAME', 'test_compress_delta'
-LANGUAGE C STRICT;
-
-
--- ==========================================
--- DELTA-OF-DELTA ENCODING
--- ==========================================
-
-CREATE FUNCTION test_compress_dod(
-    table_name TEXT,
-    column_name TEXT
-)
-RETURNS BOOLEAN
-AS 'MODULE_PATHNAME', 'test_compress_dod'
-LANGUAGE C STRICT;
+CREATE TABLE IF NOT EXISTS _timeseries_catalog.compressed_columns (
+    chunk_id        INTEGER     NOT NULL REFERENCES _timeseries_catalog.chunk(id),
+    column_name     TEXT        NOT NULL,
+    column_type     OID         NOT NULL,
+    algorithm       TEXT        NOT NULL,   -- 'dictionary' | 'delta' | 'delta_of_delta'
+    compressed_data BYTEA       NOT NULL,
+    PRIMARY KEY (chunk_id, column_name)
+);

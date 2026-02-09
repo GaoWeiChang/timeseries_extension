@@ -1,47 +1,26 @@
 #include <postgres.h>
 #include <fmgr.h>
 #include <executor/spi.h>
-#include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <utils/builtins.h>
-#include <utils/array.h>
 #include <utils/lsyscache.h>
-#include <access/htup_details.h>
 #include <funcapi.h>
+#include <string.h>
 
-#include "metadata.h"
-#include "chunk.h"
+#include "dictionary.h"
 
-typedef struct DictionaryEntry
-{
-    int32 id;
-    char value[256];
-} DictionaryEntry;
-
-typedef struct CompressedColumn
-{
-    char column_name[NAMEDATALEN];
-    Oid column_type;
-
-    int32 dict_size;
-    DictionaryEntry *dictionary;
-    int32 *encoded_values;
-    int32 num_rows;
-} CompressedColumn;
-
-static CompressedColumn *
+DictCompressed *
 compress_text_column_with_dictionary(const char *column_name, 
                                      text **values, 
                                      int num_rows)
 {
-    CompressedColumn *compressed;
+    DictCompressed *compressed;
     int dict_capacity = 100;
     int dict_size = 0; // also used as dictionary position index
 
     // allocate memory
-    compressed = (CompressedColumn *) palloc0(sizeof(CompressedColumn));
+    compressed = (DictCompressed *) palloc0(sizeof(DictCompressed));
     strncpy(compressed->column_name, column_name, NAMEDATALEN);
-    compressed->column_type = TEXTOID;
     compressed->num_rows = num_rows;
     compressed->dictionary = (DictionaryEntry *) palloc(dict_capacity * sizeof(DictionaryEntry));
     compressed->encoded_values = (int32 *) palloc(num_rows * sizeof(int32));
@@ -76,196 +55,66 @@ compress_text_column_with_dictionary(const char *column_name,
 
     compressed->dict_size = dict_size;
 
-    elog(NOTICE, "Dictionary encoding: %s", column_name);
-    elog(NOTICE, "Unique values: %d", dict_size);
-    elog(NOTICE, "Total rows: %d", num_rows);
-    elog(NOTICE, "Memory saved after compressed: %.1f%%", (1.0 - ((float)dict_size * 256 + num_rows * 4) / (num_rows * 256.0)) * 100.0);
-    
+    elog(NOTICE, "Dictionary compress %s: %d unique / %d rows", column_name, dict_size, num_rows);
     return compressed;
 }
 
-static text **
-decompress_text_column_from_dictionary(CompressedColumn *compressed)
+text **
+decompress_text_column_from_dictionary(DictCompressed *compressed)
 {
     text **values;
     values = (text **) palloc(compressed->num_rows * sizeof(text *));
 
     for(int i=0; i < compressed->num_rows; i++){
         int32 dict_id = compressed->encoded_values[i];
-        char *original_value = compressed->dictionary[dict_id].value;
-        values[i] =  cstring_to_text(original_value);
+        values[i] =  cstring_to_text(compressed->dictionary[dict_id].value);
     }
 
     return values;
 }
 
-// compress single column
-static CompressedColumn *
-compress_chunk_column(const char *schema_name,
-                      const char *table_name,
-                      const char *column_name,
-                      Oid column_type)
+bytea *
+dict_serialise(DictCompressed *c)
 {
-    StringInfoData query;
-    CompressedColumn *compressed = NULL;
+    int32 dict_bytes = c->dict_size * 256;
+    int32 id_bytes = c->num_rows * sizeof(int32);
+    int32 total = 4 + 4 + dict_bytes + id_bytes; // dict_size + num_rows + dict_bytes + id_bytes
+    bytea *out = (bytea *) palloc(VARHDRSZ + total);
+    char *p; // moving pointer
 
-    // get column data
-    initStringInfo(&query);
-    appendStringInfo(&query,
-        "SELECT %s FROM %s.%s ORDER BY ctid",
-        quote_identifier(column_name), quote_identifier(schema_name), quote_identifier(table_name));
+    SET_VARSIZE(out, VARHDRSZ + total);
+    p = VARDATA(out);
 
-    int ret = SPI_execute(query.data, true, 0);
-    if((ret != SPI_OK_SELECT) || (SPI_processed == 0)){
-        SPI_finish();
-        return NULL;
-    }
+    memcpy(p, &c->dict_size, 4); p+=4;
+    memcpy(p, &c->num_rows, 4); p+=4;
     
-    // select compression algorithm based on type
-    int num_rows = SPI_processed;
-    if((column_type == TEXTOID) || (column_type == VARCHAROID)){
-        text **values = (text **) palloc(num_rows * sizeof(text *));
-        for(uint64 i = 0; i < SPI_processed; i++){
-            bool isnull;
-            Datum value = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
-            if (!isnull)
-                values[i] = DatumGetTextPP(value);
-            else
-                values[i] = cstring_to_text("");
-        }
-        compressed = compress_text_column_with_dictionary(column_name, values, num_rows);
-    } else {
-        elog(WARNING, "  Column %s (type %u): No compression algorithm implemented yet", column_name, column_type);
+    for(int32 i=0; i<c->dict_size; i++){
+        memcpy(p, c->dictionary[i].value, 256);
+        p += 256;
     }
+    memcpy(p, c->encoded_values, id_bytes);
 
-    return compressed;
+    return out;
 }
 
-
-PG_FUNCTION_INFO_V1(test_compress_chunk_column);
-Datum 
-test_compress_chunk_column(PG_FUNCTION_ARGS)
+DictCompressed *
+dict_deserialise(bytea *data)
 {
-    text *table_name_text = PG_GETARG_TEXT_PP(0);
-    text *column_name_text = PG_GETARG_TEXT_PP(1);
-    
-    char *table_name = text_to_cstring(table_name_text);
-    char *column_name = text_to_cstring(column_name_text);
-    char *schema_name = "public";
-    
-    StringInfoData query;
-    Oid column_type;
-    CompressedColumn *compressed;
+    DictCompressed *c = (DictCompressed *) palloc(sizeof(DictCompressed));
+    char *p = VARDATA(data);
 
-    elog(NOTICE, "Testing compression on %s.%s.%s...", schema_name, table_name, column_name);
-
-    // get column name
-    SPI_connect();
-    
-    initStringInfo(&query);
-    appendStringInfo(&query,
-        "SELECT atttypid FROM pg_attribute "
-        "WHERE attrelid = '%s.%s'::regclass AND attname = '%s'",
-        schema_name, table_name, column_name);
-    
-    int ret = SPI_execute(query.data, true, 0);
-    
-    if (ret != SPI_OK_SELECT || SPI_processed == 0)
-    {
-        SPI_finish();
-        ereport(ERROR,
-                (errmsg("column \"%s\" not found in table \"%s\"",
-                        column_name, table_name)));
+    memcpy(&c->dict_size, p, 4); p+=4;
+    memcpy(&c->num_rows, p, 4); p+=4;
+   
+    c->dictionary = (DictionaryEntry *) palloc(c->dict_size * sizeof(DictionaryEntry));
+    for(int32 i=0; i<c->dict_size; i++){
+        c->dictionary[i].id = i;
+        memcpy(c->dictionary[i].value, p, 256);
+        p += 256;
     }
-    
-    bool isnull;
-    column_type = DatumGetObjectId(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
-    
-    // compress column
-    compressed = compress_chunk_column(schema_name, table_name, column_name, column_type);
 
-    if(compressed){
-        elog(NOTICE, "Testing decompression...");
-        text **decompressed = decompress_text_column_from_dictionary(compressed);
-        
-        elog(NOTICE, "✅ Compression test completed!");
-        elog(NOTICE, "   First value (original):     %s",
-             compressed->dictionary[compressed->encoded_values[0]].value);
-        elog(NOTICE, "   First value (decompressed): %s",
-             TextDatumGetCString(PointerGetDatum(decompressed[0])));
-    }
-    SPI_finish();
+    c->encoded_values = (int32 *) palloc(c->num_rows * sizeof(int32));
+    memcpy(c->encoded_values, p, c->num_rows * sizeof(int32));
 
-    PG_RETURN_BOOL(compressed != NULL);
-}
-
-
-PG_FUNCTION_INFO_V1(show_compression_info);
-Datum
-show_compression_info(PG_FUNCTION_ARGS)
-{
-    text *table_name_text = PG_GETARG_TEXT_PP(0);
-    char *table_name = text_to_cstring(table_name_text);
-    char *schema_name = "public";
-    
-    StringInfoData result;
-    StringInfoData query;
-    
-    initStringInfo(&result);
-    appendStringInfo(&result, "Compression Info for %s.%s\n\n", schema_name, table_name);
-    
-    SPI_connect();
-    
-    initStringInfo(&query);
-    appendStringInfo(&query,
-        "SELECT attname, atttypid::regtype "
-        "FROM pg_attribute "
-        "WHERE attrelid = '%s.%s'::regclass "
-        "AND attnum > 0 AND NOT attisdropped "
-        "ORDER BY attnum",
-        schema_name, table_name);
-    
-    int ret = SPI_execute(query.data, true, 0);
-    
-    if (ret == SPI_OK_SELECT)
-    {
-        appendStringInfoString(&result, "Columns and compression algorithms:\n");
-        
-        for (uint64 i = 0; i < SPI_processed; i++)
-        {
-            char *name = SPI_getvalue(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1);
-            char *type = SPI_getvalue(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2);
-            
-            if (name == NULL || type == NULL)
-                continue;
-
-            appendStringInfo(&result, "  - %s (%s): ", name, type);
-            
-            /* Determine algorithm */
-            if (strstr(type, "text") || strstr(type, "character"))
-            {
-                appendStringInfoString(&result, "Dictionary Encoding\n");
-            }
-            else if (strstr(type, "timestamp"))
-            {
-                appendStringInfoString(&result, "Delta-of-Delta (not implemented)\n");
-            }
-            else if (strstr(type, "integer") || strstr(type, "bigint"))
-            {
-                appendStringInfoString(&result, "Delta Encoding (not implemented)\n");
-            }
-            else if (strstr(type, "double") || strstr(type, "numeric"))
-            {
-                appendStringInfoString(&result, "No compression\n");
-            }
-            else
-            {
-                appendStringInfoString(&result, "Unknown\n");
-            }
-        }
-    }
-    
-    SPI_finish();
-    
-    PG_RETURN_TEXT_P(cstring_to_text(result.data));
+    return c;
 }
