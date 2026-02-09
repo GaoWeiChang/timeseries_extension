@@ -1,97 +1,160 @@
-CREATE TABLE sensor_logs (
-    time TIMESTAMPTZ NOT NULL,
-    sensor_id INT,
-    temperature DOUBLE PRECISION,
-    humidity DOUBLE PRECISION,
-    pressure DOUBLE PRECISION,
-    status TEXT,                    
-    message TEXT           
+-- test_compress_chunk_integrated.sql
+-- Phase 8.4: ทดสอบ compress_chunk() ที่ integrate 3 algorithms
+
+\echo '=========================================='
+\echo 'Phase 8.4: Integrated compress_chunk()'
+\echo '=========================================='
+\echo ''
+
+-- ==========================================
+-- Setup: สร้าง hypertable + insert data
+-- ==========================================
+
+\echo 'Setup: create hypertable + data…'
+
+DROP TABLE IF EXISTS metrics CASCADE;
+
+CREATE TABLE metrics (
+    time        TIMESTAMPTZ,        -- เวลาที่เก็บข้อมูล
+    device_name TEXT,               -- ชื่ออุปกรณ์
+    location    TEXT,               -- สถานที่ติดตั้ง
+    sensor_id   INTEGER,            -- ID ของ sensor
+    value       DOUBLE PRECISION    -- ค่าที่วัดได้
 );
 
-SELECT create_hypertable('sensor_logs', 'time', INTERVAL '1 day');
+-- สร้าง hypertable ผ่าน extension
+SELECT create_hypertable('metrics', 'time', INTERVAL '1 day');
 
+-- Insert 3 วัน (= 3 chunks)
+INSERT INTO metrics
+SELECT
+    '2024-01-01'::timestamptz + (i || ' minutes')::interval,   -- time        → DoD
+    'device_' || ((i % 5) + 1),                                  -- device_name → Dictionary
+    'location_' || ((i % 3) + 1),                                -- location    → Dictionary
+    (i % 100) + 1,                                               -- sensor_id   → Delta
+    random() * 100                                               -- value       → None (float8)
+FROM generate_series(0, 4319) i;   -- 4320 rows = 3 days × 1440 min/day
 
-INSERT INTO sensor_logs (time, sensor_id, temperature, humidity, pressure, status, message)
-SELECT 
-    timestamp '2024-01-01 00:00:00',
-    (random() * 100)::int + 1,
-    (random() * 20 + 15)::numeric(5,2),
-    (random() * 40 + 40)::numeric(5,2),
-    (random() * 100 + 980)::numeric(7,2),
-    CASE 
-        WHEN random() < 0.7 THEN 'normal'
-        WHEN random() < 0.85 THEN 'warning'
-        WHEN random() < 0.95 THEN 'error'
-        ELSE 'critical'
-    END,
-    CASE 
-        WHEN random() < 0.6 THEN 'All systems operational'
-        WHEN random() < 0.75 THEN 'Temperature slightly elevated'
-        WHEN random() < 0.85 THEN 'Humidity above threshold'
-        WHEN random() < 0.92 THEN 'Pressure anomaly detected'
-        WHEN random() < 0.97 THEN 'Sensor calibration required'
-        ELSE 'Connection unstable'
-    END
-FROM generate_series(1, 500000) AS i;
+\echo ''
+\echo '✓ Inserted 4320 rows across 3 chunks'
+\echo ''
 
--- ====================== or =========================
-INSERT INTO sensor_logs (time, sensor_id, temperature, humidity, pressure, status, message)
-SELECT 
-    timestamp '2024-01-01 00:00:00' + (i || ' seconds')::interval,
-    (i % 100) + 1,  -- ✅ sensor_id 1-100 กระจายสม่ำเสมอ
-    (random() * 20 + 15)::numeric(5,2),
-    (random() * 40 + 40)::numeric(5,2),
-    (random() * 100 + 980)::numeric(7,2),
-    CASE (i % 100)  -- ✅ ใช้ modulo แทน random
-        WHEN 0 THEN 'critical'   -- 1%
-        WHEN 1 THEN 'error'       -- 1%
-        WHEN 2 THEN 'error'       -- 1%
-        WHEN 3 THEN 'error'       -- 1%
-        WHEN 4 THEN 'error'       -- 1%
-        WHEN 5 THEN 'warning'     -- 1%
-        WHEN 6 THEN 'warning'     -- 1%
-        WHEN 7 THEN 'warning'     -- 1%
-        WHEN 8 THEN 'warning'     -- 1%
-        WHEN 9 THEN 'warning'     -- 1%
-        WHEN 10 THEN 'warning'    -- 1%
-        WHEN 11 THEN 'warning'    -- 1%
-        WHEN 12 THEN 'warning'    -- 1%
-        WHEN 13 THEN 'warning'    -- 1%
-        WHEN 14 THEN 'warning'    -- 1%
-        ELSE 'normal'             -- 85%
-    END,
-    CASE (i % 20)  -- ✅ 20 แบบกระจายสม่ำเสมอ
-        WHEN 0 THEN 'All systems operational'
-        WHEN 1 THEN 'Temperature slightly elevated'
-        WHEN 2 THEN 'Humidity above threshold'
-        WHEN 3 THEN 'Pressure anomaly detected'
-        WHEN 4 THEN 'Sensor calibration required'
-        WHEN 5 THEN 'Connection unstable'
-        WHEN 6 THEN 'Battery low'
-        WHEN 7 THEN 'Signal strength weak'
-        WHEN 8 THEN 'Data sync pending'
-        WHEN 9 THEN 'Firmware update available'
-        WHEN 10 THEN 'Maintenance scheduled'
-        WHEN 11 THEN 'Network latency high'
-        WHEN 12 THEN 'Storage capacity warning'
-        WHEN 13 THEN 'Power supply fluctuation'
-        WHEN 14 THEN 'Temperature sensor drift'
-        WHEN 15 THEN 'Humidity sensor recalibration needed'
-        WHEN 16 THEN 'Pressure reading unstable'
-        WHEN 17 THEN 'Communication timeout'
-        WHEN 18 THEN 'Configuration mismatch'
-        ELSE 'System check in progress'
-    END
-FROM generate_series(1, 50000) AS i;
+-- ==========================================
+-- Test 1: Show chunk info before compress
+-- ==========================================
 
+\echo '=========================================='
+\echo 'Test 1: Before compression'
+\echo '=========================================='
+\echo ''
 
--- size
-SELECT 
-    'Total Size' as description,
-    pg_size_pretty(SUM(pg_total_relation_size('public.' || c.table_name))) as size
-FROM _timeseries_catalog.chunk c
-WHERE c.hypertable_id = 1;
+SELECT show_compression_info('metrics');
 
+\echo ''
+SELECT show_chunk_compression_stats('metrics');
 
--- compress
+\echo ''
+
+-- ==========================================
+-- Test 2: Compress chunk 1
+-- ==========================================
+
+\echo '=========================================='
+\echo 'Test 2: compress_chunk(1)'
+\echo '=========================================='
+\echo ''
+
 SELECT compress_chunk(1);
+
+\echo ''
+
+-- ==========================================
+-- Test 3: Verify compressed_columns metadata
+-- ==========================================
+
+\echo '=========================================='
+\echo 'Test 3: compressed_columns metadata'
+\echo '=========================================='
+\echo ''
+
+SELECT chunk_id, column_name, algorithm, pg_size_pretty(octet_length(compressed_data)) as payload_size
+FROM _timeseries_catalog.compressed_columns
+WHERE chunk_id = 1
+ORDER BY column_name;
+
+\echo ''
+
+-- ==========================================
+-- Test 4: Decompress chunk 1 → verify data
+-- ==========================================
+
+\echo '=========================================='
+\echo 'Test 4: decompress_chunk(1) + verify'
+\echo '=========================================='
+\echo ''
+
+SELECT decompress_chunk(1);
+
+\echo ''
+\echo 'Row count after decompress:'
+SELECT COUNT(*) FROM metrics;
+
+\echo ''
+\echo 'Sample rows from chunk 1:'
+SELECT time, device_name, location, sensor_id
+FROM metrics
+WHERE time >= '2024-01-01' AND time < '2024-01-02'
+ORDER BY time
+LIMIT 5;
+
+\echo ''
+
+-- ==========================================
+-- Test 5: Compress all chunks
+-- ==========================================
+
+\echo '=========================================='
+\echo 'Test 5: compress_chunks_older_than'
+\echo '=========================================='
+\echo ''
+
+SELECT compress_chunks_older_than('metrics', INTERVAL '0 days');
+
+\echo ''
+SELECT show_chunk_compression_stats('metrics');
+
+\echo ''
+
+-- ==========================================
+-- Test 6: Decompress all + final verify
+-- ==========================================
+
+\echo '=========================================='
+\echo 'Test 6: Decompress all + verify'
+\echo '=========================================='
+\echo ''
+
+-- decompress each chunk
+SELECT decompress_chunk(1);
+SELECT decompress_chunk(2);
+SELECT decompress_chunk(3);
+
+\echo ''
+\echo 'Final row count (should be 4320):'
+SELECT COUNT(*) FROM metrics;
+
+\echo ''
+\echo 'Final stats:'
+SELECT show_chunk_compression_stats('metrics');
+
+\echo ''
+\echo '=========================================='
+\echo '✅ Phase 8.4 Complete!'
+\echo '=========================================='
+\echo ''
+\echo 'Algorithm mapping:'
+\echo '  time        (timestamptz) → delta_of_delta'
+\echo '  device_name (text)        → dictionary'
+\echo '  location    (text)        → dictionary'
+\echo '  sensor_id   (integer)     → delta'
+\echo '  value       (float8)      → none (skipped)'
