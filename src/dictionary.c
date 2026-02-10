@@ -11,8 +11,8 @@
 
 DictCompressed *
 compress_text_column_with_dictionary(const char *column_name, 
-                                     text **values, 
-                                     int num_rows)
+                                    char **values,
+                                    int num_rows)
 {
     DictCompressed *compressed;
     int dict_capacity = 100;
@@ -27,7 +27,7 @@ compress_text_column_with_dictionary(const char *column_name,
 
     // build dictionary
     for(int i=0; i<num_rows; i++){
-        char *value_str = TextDatumGetCString(PointerGetDatum(values[i]));
+        char *value_str = values[i];
         int dict_id = -1;
 
         for(int j=0; j<dict_size; j++){

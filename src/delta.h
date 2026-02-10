@@ -13,11 +13,11 @@ typedef struct DeltaCompressed
 
 
 // core (compress data in main memory)
-extern DeltaCompressed *compress_text_column_with_delta(const char *column_name,
+extern DeltaCompressed *compress_int_column_with_delta(const char *column_name,
                                                         Oid column_type,
                                                         int64 *values,
                                                         int32 num_rows);
-extern int64 **decompress_text_column_from_delta(DeltaCompressed *compressed);
+extern int64 *decompress_int_column_from_delta(DeltaCompressed *compressed);
 
 
 // serialise (store in disk)

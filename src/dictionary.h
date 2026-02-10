@@ -21,7 +21,7 @@ typedef struct DictCompressed
 
 // core (compress data in main memory)
 extern DictCompressed *compress_text_column_with_dictionary(const char *column_name,
-                                                            text **values,
+                                                            char **values,
                                                             int32 num_rows);
 extern text **decompress_text_column_from_dictionary(DictCompressed *compressed);
 

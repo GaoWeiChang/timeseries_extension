@@ -162,28 +162,59 @@ compress_chunk(PG_FUNCTION_ARGS)
     
     // store column info
     int32 n_cols = (int32) SPI_processed;
-    char (*col_names)[NAMEDATALEN] = palloc(n_cols * sizeof(char[NAMEDATALEN]));
-    Oid *col_types = palloc(n_cols * sizeof(Oid));
+
+    char temp_names[n_cols][NAMEDATALEN];
+    Oid temp_types[n_cols];
+
     for(int32 i=0; i<n_cols; i++){
         bool isnull;
-        strncpy(col_names[i], 
-                TextDatumGetCString(SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull)), 
-                NAMEDATALEN);
-        col_types[i] = DatumGetObjectId(SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &isnull));
+        if (SPI_tuptable->vals[i] == NULL) {
+            ereport(ERROR, (errmsg("NULL tuple at %d", i)));
+        }
+
+        // Get column name
+        Datum name_datum = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
+        if (isnull) {
+            ereport(ERROR, (errmsg("column name is NULL at row %d", i)));
+        }
+        
+        Name col_name = DatumGetName(name_datum);
+        strncpy(temp_names[i], NameStr(*col_name), NAMEDATALEN - 1);
+        temp_names[i][NAMEDATALEN - 1] = '\0';
+        
+        // Get column type
+        Datum type_datum = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &isnull);
+        if (isnull) {
+            ereport(ERROR, (errmsg("column type is NULL at row %d", i)));
+        }
+        temp_types[i] = DatumGetObjectId(type_datum);
+
+        elog(NOTICE, "Column %d: name='%s', type=%u", i, temp_names[i], temp_types[i]);
     }
     SPI_finish();
 
+    char **col_names = (char **) palloc(n_cols * sizeof(char *));
+    Oid *col_types = (Oid *) palloc(n_cols * sizeof(Oid));
+
+    for(int32 i=0; i<n_cols; i++){
+        col_names[i] = pstrdup(temp_names[i]);
+        col_types[i] = temp_types[i];
+    }
+
     // compress each column and serialise
     for(int32 col=0; col<n_cols; col++){
+        elog(NOTICE, "=== Compressing column %d ===", col);
+        elog(NOTICE, "  col_names[%d] = '%s'", col, col_names[col]);
+        elog(NOTICE, "  col_types[%d] = %u", col, col_types[col]); 
+
         Oid type = col_types[col];
-        char *col_name = col_names[col];
         const char *algo = ALG_NONE; 
         bytea *payload = NULL;
 
         SPI_connect();
         initStringInfo(&query);
         appendStringInfo(&query, "SELECT %s FROM %s.%s ORDER BY ctid",
-            quote_identifier(col_name), quote_identifier(schema), quote_identifier(table));
+            col_names[col], schema, table);
         SPI_execute(query.data, true, 0);
 
         int32 num_rows = (int32) SPI_processed;
@@ -199,7 +230,7 @@ compress_chunk(PG_FUNCTION_ARGS)
             }
             SPI_finish();
             
-            DodCompressed *compressed = compress_timestamp_column_with_dod(col_name, timestamps, num_rows);
+            DodCompressed *compressed = compress_timestamp_column_with_dod(col_names[col], timestamps, num_rows);
             payload = dod_serialise(compressed);
         }
         else if (type == INT4OID || type == INT8OID || type == INT2OID){
@@ -215,26 +246,32 @@ compress_chunk(PG_FUNCTION_ARGS)
             }
             SPI_finish();
 
-            DeltaCompressed *compressed = compress_int_column_with_delta(col_name, type, vals, num_rows);
+            DeltaCompressed *compressed = compress_int_column_with_delta(col_names[col], type, vals, num_rows);
             payload = delta_serialise(compressed);
         }
         else if (type == TEXTOID || type == VARCHAROID || type == NAMEOID){
             algo = ALG_DICTIONARY;
-            text **vals = (text **) palloc(num_rows * sizeof(text *));
+            char **str_vals = (char **) palloc(num_rows * sizeof(char *));
+
             for(int32 i=0; i<num_rows; i++){
                 bool isnull;
                 Datum datum = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
-                vals[i] = isnull ? cstring_to_text("") : DatumGetTextPP(datum); 
+                if (isnull) {
+                    str_vals[i] = pstrdup("");
+                } else {
+                    text *t = DatumGetTextPP(datum);
+                    str_vals[i] = text_to_cstring(t);
+                }
             }
             SPI_finish();
 
-            DictCompressed *compressed = compress_text_column_with_dictionary(col_name, vals, num_rows);
+            DictCompressed *compressed = compress_text_column_with_dictionary(col_names[col], str_vals, num_rows);
             payload = dict_serialise(compressed);   
         }
         else{
             algo = ALG_NONE;
             SPI_finish();
-            elog(NOTICE, "  [None] %s: skipped (type %u)", col_name, type);
+            elog(NOTICE, "  [None] %s: skipped (type %u)", col_names[col], type);
             continue;
         }
 
@@ -245,7 +282,7 @@ compress_chunk(PG_FUNCTION_ARGS)
             "INSERT INTO _timeseries_catalog.compressed_columns "
             "(chunk_id, column_name, column_type, algorithm, compressed_data) "
             "VALUES (%d, '%s', %u, '%s', $1)",
-            chunk_id, col_name, type, algo);
+            chunk_id, col_names[col], type, algo);
         
         {
             Oid paramTypes[1] = { BYTEAOID };
@@ -260,9 +297,9 @@ compress_chunk(PG_FUNCTION_ARGS)
                 5,
                 (Oid[]) { INT4OID, TEXTOID, OIDOID, TEXTOID, BYTEAOID },
                 (Datum[]) { Int32GetDatum(chunk_id),
-                            CStringGetDatum(col_name),
+                            CStringGetTextDatum(col_names[col]),
                             ObjectIdGetDatum(type),
-                            CStringGetDatum(algo),
+                            CStringGetTextDatum(algo),
                             PointerGetDatum(payload) },
                 (char[])  { ' ', ' ', ' ', ' ', ' ' },
                 false, 0);

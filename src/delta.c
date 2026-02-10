@@ -17,7 +17,7 @@ compress_int_column_with_delta(const char *column_name,
                                int32 num_rows)
 {
     DeltaCompressed *compressed;
-    int64 min_delta, max_delta;
+    int64 min_delta = INT64_MAX, max_delta = INT64_MIN;
     int64 original_size, compressed_size;
     int bytes_per_delta;
 
@@ -35,7 +35,7 @@ compress_int_column_with_delta(const char *column_name,
     }
 
     compressed->deltas = (int64 *) palloc((num_rows-1) * sizeof(int64));
-    for(int32 i=0; i<num_rows; i++){
+    for(int32 i=0; i<num_rows-1; i++){
         int64 diff = values[i+1] - values[i];
         compressed->deltas[i] = diff;
         if (diff < min_delta) min_delta = diff;
