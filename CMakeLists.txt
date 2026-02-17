@@ -57,10 +57,6 @@ set(SOURCES
     src/chunk.c
     src/trigger.c
     src/planner.c
-    src/compression.c
-    src/dictionary.c
-    src/delta.c
-    src/delta_of_delta.c
 )
 
 # ===============================================

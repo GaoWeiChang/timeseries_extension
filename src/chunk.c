@@ -390,7 +390,6 @@ chunk_get_or_create(int hypertable_id, int64 timestamp)
 {
     int64 chunk_interval;
     int64 chunk_start;
-    int64 lock_key;
     ChunkInfo *cached_info;
     int chunk_id;
 

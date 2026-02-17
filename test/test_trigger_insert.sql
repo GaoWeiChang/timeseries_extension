@@ -17,6 +17,10 @@ INSERT INTO sensor_data VALUES
     ('2024-01-01 12:00:00+00', 2, 27.5, 62.0),
     ('2024-01-01 18:00:00+00', 1, 25.0, 59.0);
 
+-- parent table must return 0
+SELECT COUNT(*) FROM ONLY sensor_data; 
+
+-- return 4 (child included)
 SELECT COUNT(*) FROM sensor_data;
 
 SELECT * FROM _hyper_1_1_chunk ORDER BY time;
@@ -34,12 +38,6 @@ ORDER BY id;
 
 
 \echo 'Insert across multiple days...'
-
-INSERT INTO sensor_data VALUES ('2024-01-03 08:00:00+00', 1, 24.0, 58.0);
-INSERT INTO sensor_data VALUES ('2024-01-03 16:00:00+00', 2, 26.5, 60.5);
-INSERT INTO sensor_data VALUES ('2024-01-04 09:00:00+00', 3, 27.0, 61.5);
-INSERT INTO sensor_data VALUES ('2024-01-04 15:00:00+00', 1, 25.5, 59.5);
-INSERT INTO sensor_data VALUES ('2024-01-05 11:00:00+00', 2, 28.5, 63.5);
 
 INSERT INTO sensor_data VALUES 
     ('2024-01-03 08:00:00+00', 1, 24.0, 58.0),
