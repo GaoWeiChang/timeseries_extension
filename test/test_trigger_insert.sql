@@ -59,9 +59,6 @@ CREATE TABLE metrics (
 SELECT create_hypertable('metrics', 'time', INTERVAL '1 hour');
 
 \echo 'Inserting data spanning 3 hours...'
-INSERT INTO metrics VALUES ('2024-01-01 00:30:00+00', 100.0);
-INSERT INTO metrics VALUES ('2024-01-01 01:30:00+00', 150.0);
-INSERT INTO metrics VALUES ('2024-01-01 02:30:00+00', 200.0);
 
 INSERT INTO metrics VALUES
     ('2024-01-01 00:30:00+00', 100.0),
