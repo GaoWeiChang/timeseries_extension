@@ -20,6 +20,9 @@ INSERT INTO sensor_data VALUES
     ('2024-01-09 2:00', 1, 18.0),
     ('2024-01-10 5:00', 3, 40.0);
 
+-- =============================================
+-- Manual Retention
+-- =============================================
 
 -- remove chunk lower than 365 days(1 year)
 SELECT drop_chunks('sensor_data', INTERVAL '365 days');
@@ -55,7 +58,7 @@ SELECT remove_retention_policy('sensor_data');
 
 
 -- =============================================
--- Test Background worker
+-- Auto Retention
 -- =============================================
 
 -- insert data
