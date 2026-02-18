@@ -53,8 +53,6 @@ CREATE TABLE _timeseries_catalog.chunk (
     start_time BIGINT NOT NULL,                
     end_time BIGINT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    compressed BOOLEAN DEFAULT false,
-    compressed_at TIMESTAMPTZ,
     
     UNIQUE(schema_name, table_name),
     CHECK(end_time > start_time)
@@ -161,8 +159,7 @@ BEGIN
         pg.schemaname as schema_name,
         pg.tablename as table_name
     FROM pg_tables as pg
-    WHERE pg.tablename LIKE '_hyper_%'
-    ORDER BY pg.tablename;
+    WHERE pg.tablename LIKE '_hyper_%';
 END;
 $$ 
 LANGUAGE plpgsql;
@@ -212,3 +209,47 @@ CREATE FUNCTION trigger_insert()
 RETURNS TRIGGER
 AS 'MODULE_PATHNAME', 'trigger_insert'
 LANGUAGE C;
+
+-- ==========================================
+-- DATA RETENTION SYSTEM
+-- ==========================================
+
+-- store data retention policy table
+CREATE TABLE _timeseries_catalog.retention_policies (
+    hypertable_id INTEGER NOT NULL REFERENCES _timeseries_catalog.hypertable(id) ON DELETE CASCADE,
+    retain_microseconds BIGINT NOT NULL CHECK (retain_microseconds > 0),
+    retain_periods INTERVAL NOT NULL CHECK (retain_periods > INTERVAL '0'),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE(hypertable_id)
+);
+
+-- drop chunk
+CREATE FUNCTION drop_chunks(
+    hypertable   REGCLASS,
+    older_than   INTERVAL
+) RETURNS INTEGER
+AS 'MODULE_PATHNAME', 'drop_chunks'
+LANGUAGE C STRICT;
+
+-- set retention policy
+CREATE FUNCTION set_retention_policy(
+    hypertable        REGCLASS,
+    retention_period  INTERVAL
+) RETURNS VOID
+AS 'MODULE_PATHNAME', 'set_retention_policy'
+LANGUAGE C STRICT;
+
+-- remove policy
+CREATE FUNCTION remove_retention_policy(
+    hypertable  REGCLASS
+) RETURNS VOID
+AS 'MODULE_PATHNAME', 'remove_retention_policy'
+LANGUAGE C STRICT;
+
+-- apply to all policy (manual)
+CREATE FUNCTION apply_retention_policies()
+RETURNS VOID
+AS 'MODULE_PATHNAME', 'apply_retention_policies'
+LANGUAGE C STRICT;
