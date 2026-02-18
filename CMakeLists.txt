@@ -57,6 +57,7 @@ set(SOURCES
     src/chunk.c
     src/trigger.c
     src/planner.c
+    src/retention.c
 )
 
 # ===============================================
