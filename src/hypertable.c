@@ -15,8 +15,8 @@
 #include "chunk.h"
 #include "planner.h"
 
-#define USECS_PER_DAY INT64CONST(86400000000)
-#define USECS_PER_HOUR INT64CONST(3600000000)
+#define MICROSECS_PER_DAY INT64CONST(86400000000)
+#define MICROSECS_PER_HOUR INT64CONST(3600000000)
 
 
 /*
@@ -26,7 +26,7 @@ static int64
 interval_to_microseconds(Interval *interval)
 {
     int64 result = 0;
-    result += interval->day * USECS_PER_DAY;
+    result += interval->day * MICROSECS_PER_DAY;
     result += interval->time;
 
     return result;
@@ -139,13 +139,13 @@ create_hypertable(PG_FUNCTION_ARGS)
     time_type = time_attr->atttypid;
 
     interval_us = interval_to_microseconds(chunk_interval);
-    if (interval_us >= USECS_PER_DAY)
+    if (interval_us >= MICROSECS_PER_DAY)
     {
-        elog(NOTICE, "Chunk time interval: %ld day(s)", interval_us / USECS_PER_DAY);
+        elog(NOTICE, "Chunk time interval: %ld day(s)", interval_us / MICROSECS_PER_DAY);
     }
-    else if (interval_us >= USECS_PER_HOUR)
+    else if (interval_us >= MICROSECS_PER_HOUR)
     {
-        elog(NOTICE, "Chunk time interval: %ld hour(s)", interval_us / USECS_PER_HOUR);
+        elog(NOTICE, "Chunk time interval: %ld hour(s)", interval_us / MICROSECS_PER_HOUR);
     }
     else
     {

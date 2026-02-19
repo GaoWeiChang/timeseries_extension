@@ -16,7 +16,7 @@
 #include "metadata.h"
 #include "retention.h"
 
-#define USECS_PER_DAY INT64CONST(86400000000)
+#define MICROSECS_PER_DAY INT64CONST(86400000000)
 
 // postgresql use SIGTERM as the signal for background worker to stop
 // when postgresql shutdown, it will send SIGTERM to every background workers
@@ -268,7 +268,7 @@ set_retention_policy(PG_FUNCTION_ARGS)
     char *retain_days = DatumGetCString(DirectFunctionCall1(interval_out, PointerGetDatum(retain_periods)));
 
     // convert interval to microsecond
-    int64 retain_microseconds = (int64) retain_periods->day  * USECS_PER_DAY + (int64) retain_periods->time;
+    int64 retain_microseconds = (int64) retain_periods->day  * MICROSECS_PER_DAY + (int64) retain_periods->time;
 
     SPI_connect();
 
