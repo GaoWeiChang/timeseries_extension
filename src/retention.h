@@ -2,6 +2,9 @@
 
 #include <postgres.h>
 
+#define NAMEDATALEN 64
+#define MICROSECS_PER_DAY INT64CONST(86400000000)
+
 // drop old chunk that older than cutoff time
 extern int retention_drop_old_chunks(int hypertable_id, int64 cutoff_time);
 

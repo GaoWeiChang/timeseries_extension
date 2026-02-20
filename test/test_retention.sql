@@ -87,4 +87,3 @@ select * from sensor_data;
 SELECT pid, application_name, state, query
 FROM pg_stat_activity
 WHERE datname = 'test_db';
-

@@ -16,6 +16,8 @@
 
 #include "metadata.h"
 
+#define NAMEDATALEN 64
+
 /*
     Cache system for planner Workflow
 
