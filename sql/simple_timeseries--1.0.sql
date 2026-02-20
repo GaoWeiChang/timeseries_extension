@@ -253,3 +253,56 @@ CREATE FUNCTION apply_retention_policies()
 RETURNS VOID
 AS 'MODULE_PATHNAME', 'apply_retention_policies'
 LANGUAGE C STRICT;
+
+-- ==========================================
+-- CONTINUOUS AGGREGATES
+-- ==========================================
+
+-- continuous aggregate catalog
+CREATE TABLE _timeseries_catalog.continuous_aggregate (
+    id                SERIAL PRIMARY KEY,
+    view_name         TEXT NOT NULL UNIQUE,
+    hypertable_id     INTEGER NOT NULL
+                          REFERENCES _timeseries_catalog.hypertable(id) ON DELETE CASCADE,
+    view_definition   TEXT NOT NULL,
+    bucket_width      BIGINT NOT NULL,
+    refresh_interval  BIGINT DEFAULT NULL,  -- microseconds, NULL = manual only
+    watermark         BIGINT NOT NULL DEFAULT 0,  -- last refreshed timestamp
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ
+);
+
+-- round timestamp for place in the same bucket
+CREATE FUNCTION time_bucket(
+    bucket_width  INTERVAL,
+    ts            TIMESTAMPTZ
+) RETURNS TIMESTAMPTZ
+AS 'MODULE_PATHNAME', 'time_bucket'
+LANGUAGE C STRICT;
+
+-- create continuous aggregate
+CREATE FUNCTION create_continuous_aggregate(
+    view_name         TEXT,
+    hypertable        REGCLASS,
+    view_sql          TEXT,
+    bucket_width      INTERVAL,
+    refresh_interval  INTERVAL DEFAULT NULL
+) RETURNS VOID
+AS 'MODULE_PATHNAME', 'create_continuous_aggregate'
+LANGUAGE C STRICT;
+
+-- refresh cagg (range)
+CREATE FUNCTION refresh_continuous_aggregate(
+    view_name   TEXT,
+    start_time  TIMESTAMPTZ,
+    end_time    TIMESTAMPTZ
+) RETURNS VOID
+AS 'MODULE_PATHNAME', 'refresh_continuous_aggregate'
+LANGUAGE C STRICT;
+
+-- drop continuous aggregate
+CREATE FUNCTION drop_continuous_aggregate(
+    view_name  TEXT
+) RETURNS VOID
+AS 'MODULE_PATHNAME', 'drop_continuous_aggregate'
+LANGUAGE C STRICT;

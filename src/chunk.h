@@ -3,6 +3,8 @@
 #include <postgres.h>
 #include <utils/hsearch.h>
 
+#define NAMEDATALEN 64
+
 typedef struct ChunkInfo {
     int chunk_id;
     char schema_name[NAMEDATALEN];

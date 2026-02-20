@@ -16,8 +16,6 @@
 #include "metadata.h"
 #include "retention.h"
 
-#define MICROSECS_PER_DAY INT64CONST(86400000000)
-
 // postgresql use SIGTERM as the signal for background worker to stop
 // when postgresql shutdown, it will send SIGTERM to every background workers
 static volatile sig_atomic_t got_sigterm = false;
@@ -181,6 +179,7 @@ retention_worker_main(Datum main_arg)
     BackgroundWorkerUnblockSignals();
 
     BackgroundWorkerInitializeConnection("test_db", NULL, 0);
+    pgstat_report_appname("retention worker");
 
     while(!got_sigterm){
         int ret;

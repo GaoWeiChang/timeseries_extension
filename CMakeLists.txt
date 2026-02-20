@@ -58,6 +58,7 @@ set(SOURCES
     src/trigger.c
     src/planner.c
     src/retention.c
+    tsl/src/continuous_aggs.c
 )
 
 # ===============================================
