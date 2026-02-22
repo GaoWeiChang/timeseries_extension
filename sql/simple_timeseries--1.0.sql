@@ -52,6 +52,7 @@ CREATE TABLE _timeseries_catalog.chunk (
     table_name TEXT NOT NULL, -- chunk name
     start_time BIGINT NOT NULL,                
     end_time BIGINT NOT NULL,
+    is_compressed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
     UNIQUE(schema_name, table_name),
@@ -306,3 +307,38 @@ CREATE FUNCTION drop_continuous_aggregate(
 ) RETURNS VOID
 AS 'MODULE_PATHNAME', 'drop_continuous_aggregate'
 LANGUAGE C STRICT;
+
+-- ==========================================
+-- COMPRESSION SYSTEM
+-- ==========================================
+
+-- compressed chunk storage
+CREATE TABLE _timeseries_catalog.compressed_chunk (
+    id                 SERIAL PRIMARY KEY,
+    chunk_id           INTEGER NOT NULL REFERENCES _timeseries_catalog.chunk(id) ON DELETE CASCADE,
+    column_name        TEXT NOT NULL,
+    column_type        TEXT NOT NULL,
+    column_data        BYTEA NOT NULL,     -- TOAST compression happens here
+    row_count          INTEGER,
+    uncompressed_bytes BIGINT,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX compressed_chunk_chunk_id_idx ON _timeseries_catalog.compressed_chunk(chunk_id);
+
+-- compress chunk
+CREATE FUNCTION compress_chunk(
+    chunk_name  REGCLASS
+) RETURNS VOID
+AS 'MODULE_PATHNAME', 'compress_chunk'
+LANGUAGE C STRICT;
+
+-- check compressed table
+SELECT
+    chunk_id,
+    column_name,
+    column_type,
+    row_count                                            
+FROM _timeseries_catalog.compressed_chunk
+WHERE chunk_id = 1
+ORDER BY id;

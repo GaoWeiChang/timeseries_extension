@@ -46,7 +46,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -fno-omit-frame-pointer")
 
 
 # ===============================================
-# กำหนด Source Files
+# Source Files
 # ===============================================
 
 set(SOURCES
@@ -59,6 +59,7 @@ set(SOURCES
     src/planner.c
     src/retention.c
     tsl/src/continuous_aggs.c
+    tsl/src/compression.c
 )
 
 # ===============================================
