@@ -144,7 +144,7 @@ WHERE bucket >= '2026-02-20';
 SELECT drop_continuous_aggregate('sensor_daily');
 
 
--- check background workers
+-- check background worker in database (must have 1 cagg bgw in that table))
 SELECT pid, application_name, state, query
 FROM pg_stat_activity
 WHERE datname = 'test_db';
