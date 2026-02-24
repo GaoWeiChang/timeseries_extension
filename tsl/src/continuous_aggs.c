@@ -370,3 +370,10 @@ drop_continuous_aggregate(PG_FUNCTION_ARGS)
     SPI_finish();
     PG_RETURN_VOID();
 }
+
+PG_FUNCTION_INFO_V1(start_cagg_worker);
+Datum 
+start_cagg_worker(PG_FUNCTION_ARGS)
+{
+    
+}

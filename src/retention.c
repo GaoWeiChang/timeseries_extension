@@ -322,3 +322,9 @@ apply_retention_policies(PG_FUNCTION_ARGS)
     PG_RETURN_VOID();
 }
 
+PG_FUNCTION_INFO_V1(start_retention_worker);
+Datum 
+start_retention_worker(PG_FUNCTION_ARGS)
+{
+
+}

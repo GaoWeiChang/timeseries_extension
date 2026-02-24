@@ -255,6 +255,14 @@ RETURNS VOID
 AS 'MODULE_PATHNAME', 'apply_retention_policies'
 LANGUAGE C STRICT;
 
+-- start retention background worker for current database
+CREATE FUNCTION start_retention_worker()
+RETURNS VOID
+AS 'MODULE_PATHNAME', 'start_retention_worker'
+LANGUAGE C STRICT;
+ 
+SELECT start_retention_worker(); 
+
 -- ==========================================
 -- CONTINUOUS AGGREGATES
 -- ==========================================
@@ -307,6 +315,14 @@ CREATE FUNCTION drop_continuous_aggregate(
 ) RETURNS VOID
 AS 'MODULE_PATHNAME', 'drop_continuous_aggregate'
 LANGUAGE C STRICT;
+
+-- start continuous aggregate worker for current database
+CREATE FUNCTION start_cagg_worker()
+RETURNS VOID
+AS 'MODULE_PATHNAME', 'start_cagg_worker'
+LANGUAGE C STRICT;
+ 
+SELECT start_cagg_worker(); 
 
 -- ==========================================
 -- COMPRESSION SYSTEM
