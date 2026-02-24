@@ -113,6 +113,57 @@ Expected output:
 (7 rows)
 */
 
+/* Daily basic test*/
+```
+-- insert 7 days of chunks
+INSERT INTO sensor_readings
+SELECT
+    '2026-02-16'::timestamptz + (i || ' hours')::interval AS time,
+    ((i % 5) + 1) AS sensor_id,
+    20 + random() * 15 AS temperature,
+    40 + random() * 30 AS humidity
+FROM generate_series(0, 167) i;
+
+
+-- create continuous daily
+SELECT create_continuous_aggregate(
+    'sensor_daily', 
+    'sensor_readings',
+    'SELECT
+        time_bucket(''1 day'', time) AS bucket,
+        AVG(temperature) AS avg_temp,
+        MIN(temperature) AS min_temp,
+        MAX(temperature) AS max_temp,
+        COUNT(*) AS sample_count
+     FROM sensor_readings
+     GROUP BY bucket',
+    INTERVAL '1 day',      -- bucket in cagg table
+    INTERVAL '1 hour'      -- auto refresh every 1 hour
+);
+
+-- wait for few second the table will auto refresh
+select * from _timeseries_catalog.sensor_daily;
+
+-- insert past day data (4 days)
+INSERT INTO sensor_readings
+SELECT
+    '2026-02-12'::timestamptz + (i || ' hours')::interval AS time,
+    ((i % 5) + 1) AS sensor_id,
+    20 + random() * 15 AS temperature,
+    40 + random() * 30 AS humidity
+FROM generate_series(0, 95) i;
+
+-- manual refresh
+SELECT refresh_continuous_aggregate(
+    'sensor_daily',
+    '2026-02-12 00:00:00+00'::timestamptz,
+    '2026-02-16 00:00:00+00'::timestamptz
+);
+
+-- check the table
+select * from _timeseries_catalog.sensor_daily;
+```
+
 
 -- Insert new data
 INSERT INTO sensor_readings VALUES
