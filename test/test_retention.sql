@@ -45,7 +45,7 @@ INSERT INTO sensor_data VALUES
     ('2024-01-10 12:00', 3, 40.0);
 
 -- set policy (drop partial chunks)
-SELECT set_retention_policy('sensor_data', INTERVAL '774 days'); 
+SELECT set_retention_policy('sensor_data', INTERVAL '365 days'); 
 
 -- check policy
 SELECT * FROM _timeseries_catalog.retention_policies;
@@ -83,7 +83,7 @@ SELECT set_retention_policy('sensor_data', INTERVAL '774 days');
 -- output 6 rows, since some of chunks get remove due to policy
 select * from sensor_data;
 
--- check background worker in database (output must have 2 processes id (1 user, 1 background worker))
+-- check background worker in database (must have 1 retention bgw in that table))
 SELECT pid, application_name, state, query
 FROM pg_stat_activity
 WHERE datname = 'test_db';
