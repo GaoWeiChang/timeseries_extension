@@ -288,7 +288,7 @@ CREATE FUNCTION create_continuous_aggregate(
     refresh_interval  INTERVAL DEFAULT NULL
 ) RETURNS VOID
 AS 'MODULE_PATHNAME', 'create_continuous_aggregate'
-LANGUAGE C STRICT;
+LANGUAGE C;
 
 -- refresh cagg (range)
 CREATE FUNCTION refresh_continuous_aggregate(

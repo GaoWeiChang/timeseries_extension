@@ -209,7 +209,7 @@ cagg_worker_main(Datum main_arg)
     pgstat_report_appname("continuous aggregate worker");
     
     while(!got_sigterm){
-        // wait 120 sec for receive signal
+        // wait 120 sec for auto refresh
         int ret = WaitLatch(MyLatch,
                         WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
                         120000L,  // 120 seconds

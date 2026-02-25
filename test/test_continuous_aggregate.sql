@@ -198,7 +198,7 @@ SELECT drop_continuous_aggregate('sensor_daily');
 -- check background worker in database (must have 1 cagg bgw in that table))
 SELECT pid, application_name, state, query
 FROM pg_stat_activity
-WHERE datname = 'test_db';
+WHERE datname = 'test_cagg';
 
 -- check which chunk need to refresh
 SELECT id, view_name, watermark, bucket_width, refresh_interval
