@@ -199,11 +199,13 @@ cagg_refresh_all_due(void)
 void 
 cagg_worker_main(Datum main_arg)
 {
+    Oid db_oid = DatumGetObjectId(main_arg);
+
     // register signal handler
     pqsignal(SIGTERM, cagg_sigterm_handler);
     BackgroundWorkerUnblockSignals();
 
-    BackgroundWorkerInitializeConnection("test_db", NULL, 0);
+    BackgroundWorkerInitializeConnectionByOid(db_oid, InvalidOid, 0);
     pgstat_report_appname("continuous aggregate worker");
     
     while(!got_sigterm){
@@ -368,5 +370,28 @@ drop_continuous_aggregate(PG_FUNCTION_ARGS)
     elog(NOTICE, "continuous aggregate \"%s\" dropped", view_name);
 
     SPI_finish();
+    PG_RETURN_VOID();
+}
+
+PG_FUNCTION_INFO_V1(start_cagg_worker);
+Datum 
+start_cagg_worker(PG_FUNCTION_ARGS)
+{
+    BackgroundWorker worker;
+    BackgroundWorkerHandle *handle;
+
+    MemSet(&worker, 0, sizeof(worker));
+    strlcpy(worker.bgw_name, "continuous aggregate worker", BGW_MAXLEN);
+    strlcpy(worker.bgw_library_name, "simple_timeseries", BGW_MAXLEN);
+    strlcpy(worker.bgw_function_name, "cagg_worker_main", BGW_MAXLEN);
+
+    worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
+    worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
+    worker.bgw_restart_time = 10;
+
+    worker.bgw_main_arg = ObjectIdGetDatum(MyDatabaseId);
+
+    RegisterDynamicBackgroundWorker(&worker, &handle);
+
     PG_RETURN_VOID();
 }

@@ -92,8 +92,7 @@ GROUP BY h.id, h.schema_name, h.table_name, d.column_name, d.interval_length, h.
 CREATE FUNCTION check_hypertable_exists(
     schema_name text,
     table_name text
-) RETURNS boolean 
-AS $$
+) RETURNS boolean AS $$
 BEGIN
     RETURN EXISTS (
         SELECT *
@@ -102,16 +101,14 @@ BEGIN
             AND h.table_name = check_hypertable_exists.table_name
     );
 END;
-$$ 
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 
 -- get hypertable info
 CREATE FUNCTION get_hypertable_info(
     s_name text,
     t_name text
-) RETURNS text 
-AS $$
+) RETURNS text AS $$
 DECLARE
     info_text text;
 BEGIN
@@ -127,15 +124,13 @@ BEGIN
 
     RETURN info_text;
 END;
-$$ 
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 
 -- display chunk by hypertable id
 CREATE FUNCTION get_chunks_by_hid(
     p_hypertable_id int
-) RETURNS TABLE (table_name text, start_time timestamptz, end_time timestamptz)
-AS $$
+) RETURNS TABLE (table_name text, start_time timestamptz, end_time timestamptz) AS $$
 BEGIN
     RETURN QUERY 
     SELECT 
@@ -146,14 +141,12 @@ BEGIN
     WHERE c.hypertable_id = p_hypertable_id
     ORDER BY c.start_time;
 END;
-$$ 
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 
 -- display all chunks
 CREATE FUNCTION display_all_chunks(
-) RETURNS TABLE (schema_name name, table_name name)
-AS $$
+) RETURNS TABLE (schema_name name, table_name name) AS $$
 BEGIN
     RETURN QUERY
     SELECT 
@@ -162,13 +155,11 @@ BEGIN
     FROM pg_tables as pg
     WHERE pg.tablename LIKE '_hyper_%';
 END;
-$$ 
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- show all triggers
 CREATE FUNCTION display_all_triggers(    
-) RETURNS TABLE (table_name name, trigger_name name)
-AS $$
+) RETURNS TABLE (table_name name, trigger_name name) AS $$
 BEGIN
     RETURN QUERY
     SELECT
@@ -180,8 +171,7 @@ BEGIN
         info.event_object_table,
         info.trigger_name;
 END;
-$$ 
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- ==========================================
 -- HYPERTABLE FUNCTIONS
@@ -255,6 +245,14 @@ RETURNS VOID
 AS 'MODULE_PATHNAME', 'apply_retention_policies'
 LANGUAGE C STRICT;
 
+-- start retention background worker for current database
+CREATE FUNCTION start_retention_worker()
+RETURNS VOID
+AS 'MODULE_PATHNAME', 'start_retention_worker'
+LANGUAGE C STRICT;
+ 
+SELECT start_retention_worker(); 
+
 -- ==========================================
 -- CONTINUOUS AGGREGATES
 -- ==========================================
@@ -308,6 +306,14 @@ CREATE FUNCTION drop_continuous_aggregate(
 AS 'MODULE_PATHNAME', 'drop_continuous_aggregate'
 LANGUAGE C STRICT;
 
+-- start continuous aggregate worker for current database
+CREATE FUNCTION start_cagg_worker()
+RETURNS VOID
+AS 'MODULE_PATHNAME', 'start_cagg_worker'
+LANGUAGE C STRICT;
+ 
+SELECT start_cagg_worker(); 
+
 -- ==========================================
 -- COMPRESSION SYSTEM
 -- ==========================================
@@ -342,3 +348,25 @@ SELECT
 FROM _timeseries_catalog.compressed_chunk
 WHERE chunk_id = 1
 ORDER BY id;
+
+
+-- ==========================================
+-- BACKGROUND WORKER
+-- ==========================================
+
+-- stop background workers
+CREATE FUNCTION stop_background_workers(
+) RETURNS event_trigger AS $$
+BEGIN
+    PERFORM pg_terminate_backend(pid)
+    FROM pg_stat_activity
+    WHERE (application_name IN ('retention worker', 'continuous aggregate worker'))
+        AND (datname = current_database());
+END;
+$$ LANGUAGE plpgsql;
+
+-- event trigger drop bgw when called DROP EXTENSION
+CREATE EVENT TRIGGER drop_bgw_when_drop_extension
+ON ddl_command_start
+WHEN TAG IN ('DROP EXTENSION')
+EXECUTE FUNCTION stop_background_workers();
