@@ -200,14 +200,38 @@ void
 cagg_worker_main(Datum main_arg)
 {
     Oid db_oid = DatumGetObjectId(main_arg);
+    elog(LOG, "cagg worker starting for db_oid=%u", db_oid);
 
     // register signal handler
     pqsignal(SIGTERM, cagg_sigterm_handler);
     BackgroundWorkerUnblockSignals();
 
     BackgroundWorkerInitializeConnectionByOid(db_oid, InvalidOid, 0);
+    elog(LOG, "cagg worker connected to db_oid=%u", db_oid);
+
     pgstat_report_appname("continuous aggregate worker");
     
+    // check extension in db
+    SetCurrentStatementStartTimestamp();
+    StartTransactionCommand();
+    SPI_connect();
+    PushActiveSnapshot(GetTransactionSnapshot());
+
+    int ret = SPI_execute(
+            "SELECT 1 FROM pg_extension WHERE extname = 'simple_timeseries'",
+            true, 1);
+    
+    bool has_extension = (ret == SPI_OK_SELECT && SPI_processed > 0);
+    
+    SPI_finish();
+    PopActiveSnapshot();
+    CommitTransactionCommand();
+
+    if (!has_extension) {
+        elog(LOG, "continuous aggregate worker: simple_timeseries not found in this db, exiting");
+        proc_exit(1);
+    }
+
     while(!got_sigterm){
         // wait 120 sec for receive signal
         int ret = WaitLatch(MyLatch,
@@ -370,28 +394,5 @@ drop_continuous_aggregate(PG_FUNCTION_ARGS)
     elog(NOTICE, "continuous aggregate \"%s\" dropped", view_name);
 
     SPI_finish();
-    PG_RETURN_VOID();
-}
-
-PG_FUNCTION_INFO_V1(start_cagg_worker);
-Datum 
-start_cagg_worker(PG_FUNCTION_ARGS)
-{
-    BackgroundWorker worker;
-    BackgroundWorkerHandle *handle;
-
-    MemSet(&worker, 0, sizeof(worker));
-    strlcpy(worker.bgw_name, "continuous aggregate worker", BGW_MAXLEN);
-    strlcpy(worker.bgw_library_name, "simple_timeseries", BGW_MAXLEN);
-    strlcpy(worker.bgw_function_name, "cagg_worker_main", BGW_MAXLEN);
-
-    worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
-    worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
-    worker.bgw_restart_time = 10;
-
-    worker.bgw_main_arg = ObjectIdGetDatum(MyDatabaseId);
-
-    RegisterDynamicBackgroundWorker(&worker, &handle);
-
     PG_RETURN_VOID();
 }

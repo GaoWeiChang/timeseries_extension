@@ -36,7 +36,7 @@ execute_process(
 # ==========================================
 # Setting up compiler
 # ==========================================
-
+  
 # warning flag
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 
@@ -60,10 +60,11 @@ set(SOURCES
     src/retention.c
     tsl/src/continuous_aggs.c
     tsl/src/compression.c
+    src/loader/launcher.c
 )
 
 # ===============================================
-# create shared Librarl (.so)
+# Create shared library (.so)
 # ===============================================
 
 add_library(simple_timeseries MODULE ${SOURCES})

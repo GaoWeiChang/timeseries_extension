@@ -175,13 +175,37 @@ void
 retention_worker_main(Datum main_arg)
 {
     Oid db_oid = DatumGetObjectId(main_arg);
-    
+    elog(LOG, "retention worker starting for db_oid=%u", db_oid);
+
     // register signal handler
     pqsignal(SIGTERM, retention_sigterm_handler);
     BackgroundWorkerUnblockSignals();
 
     BackgroundWorkerInitializeConnectionByOid(db_oid, InvalidOid, 0);
+    elog(LOG, "retention worker connected to db_oid=%u", db_oid);
+    
     pgstat_report_appname("retention worker");
+
+    // check extension in db
+    SetCurrentStatementStartTimestamp();
+    StartTransactionCommand();
+    SPI_connect();
+    PushActiveSnapshot(GetTransactionSnapshot());
+
+    int ret = SPI_execute(
+                "SELECT 1 FROM pg_extension WHERE extname = 'simple_timeseries'",
+                true, 1);
+    
+    bool has_extension = (ret == SPI_OK_SELECT && SPI_processed > 0);
+    
+    SPI_finish();
+    PopActiveSnapshot();
+    CommitTransactionCommand();
+    
+    if(!has_extension){
+        elog(LOG, "retention worker: simple_timeseries not found in this db, exiting");
+        proc_exit(1);
+    }
 
     while(!got_sigterm){
         int ret;
@@ -321,28 +345,5 @@ apply_retention_policies(PG_FUNCTION_ARGS)
     SPI_finish();
 
     elog(NOTICE, "apply_retention_policies: %d chunk(s) dropped in total", total);
-    PG_RETURN_VOID();
-}
-
-PG_FUNCTION_INFO_V1(start_retention_worker);
-Datum 
-start_retention_worker(PG_FUNCTION_ARGS)
-{
-    BackgroundWorker worker;
-    BackgroundWorkerHandle *handle;
-
-    MemSet(&worker, 0, sizeof(worker));
-    strlcpy(worker.bgw_name, "retention worker", BGW_MAXLEN);
-    strlcpy(worker.bgw_library_name, "simple_timeseries", BGW_MAXLEN);
-    strlcpy(worker.bgw_function_name, "retention_worker_main", BGW_MAXLEN);
-
-    worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
-    worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
-    worker.bgw_restart_time = 10;
-
-    worker.bgw_main_arg = ObjectIdGetDatum(MyDatabaseId);
-
-    RegisterDynamicBackgroundWorker(&worker, &handle);
-    
     PG_RETURN_VOID();
 }
