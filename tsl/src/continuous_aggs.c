@@ -26,6 +26,31 @@ cagg_sigterm_handler(SIGNAL_ARGS)
     SetLatch(MyLatch); // wake worker up
 }
 
+// check continuous aggreagte background worker exist or not
+static bool
+is_cagg_bgw_exist(void)
+{
+    int ret;
+    bool existed = false;
+    StringInfoData query;
+
+    SPI_connect();
+
+    initStringInfo(&query);
+    appendStringInfo(&query,
+        "SELECT 1 FROM pg_stat_activity "
+        "WHERE application_name = 'continuous aggregate worker' "
+        "   AND datid = %u", MyDatabaseId);
+
+    ret = SPI_execute(query.data, true, 1);
+
+    if (ret == SPI_OK_SELECT && SPI_processed > 0)
+        existed = true;
+
+    SPI_finish();
+    return existed; 
+}
+
 // update watermark
 void 
 cagg_set_watermark(int cagg_id, int64 watermark)
@@ -377,6 +402,11 @@ PG_FUNCTION_INFO_V1(start_cagg_worker);
 Datum 
 start_cagg_worker(PG_FUNCTION_ARGS)
 {
+    if(is_cagg_bgw_exist()){ 
+        elog(NOTICE, "continuous aggregate worker already running, skipping");
+        PG_RETURN_VOID();
+    }
+
     BackgroundWorker worker;
     BackgroundWorkerHandle *handle;
 
@@ -388,7 +418,6 @@ start_cagg_worker(PG_FUNCTION_ARGS)
     worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
     worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
     worker.bgw_restart_time = 10;
-
     worker.bgw_main_arg = ObjectIdGetDatum(MyDatabaseId);
 
     RegisterDynamicBackgroundWorker(&worker, &handle);

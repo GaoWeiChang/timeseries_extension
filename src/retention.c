@@ -27,6 +27,31 @@ retention_sigterm_handler(SIGNAL_ARGS)
     SetLatch(MyLatch); // wake worker up
 }
 
+// check retention background worker exist or not
+static bool
+is_retention_bgw_exist(void)
+{
+    int ret;
+    bool existed = false;
+    StringInfoData query;
+
+    SPI_connect();
+
+    initStringInfo(&query);
+    appendStringInfo(&query,
+        "SELECT 1 FROM pg_stat_activity "
+        "WHERE application_name = 'retention worker' "
+        "   AND datid = %u", MyDatabaseId);
+
+    ret = SPI_execute(query.data, true, 1);
+
+    if (ret == SPI_OK_SELECT && SPI_processed > 0)
+        existed = true;
+
+    SPI_finish();
+    return existed;    
+}
+
 int 
 retention_drop_old_chunks(int hypertable_id, int64 cutoff_time)
 {
@@ -328,6 +353,11 @@ PG_FUNCTION_INFO_V1(start_retention_worker);
 Datum 
 start_retention_worker(PG_FUNCTION_ARGS)
 {
+    if(is_retention_bgw_exist()){ 
+        elog(NOTICE, "retention worker already running, skipping");
+        PG_RETURN_VOID();
+    }
+
     BackgroundWorker worker;
     BackgroundWorkerHandle *handle;
 
@@ -335,14 +365,13 @@ start_retention_worker(PG_FUNCTION_ARGS)
     strlcpy(worker.bgw_name, "retention worker", BGW_MAXLEN);
     strlcpy(worker.bgw_library_name, "simple_timeseries", BGW_MAXLEN);
     strlcpy(worker.bgw_function_name, "retention_worker_main", BGW_MAXLEN);
-
+    
     worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
     worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
     worker.bgw_restart_time = 10;
-
     worker.bgw_main_arg = ObjectIdGetDatum(MyDatabaseId);
-
-    RegisterDynamicBackgroundWorker(&worker, &handle);
     
+    RegisterDynamicBackgroundWorker(&worker, &handle);
+        
     PG_RETURN_VOID();
 }

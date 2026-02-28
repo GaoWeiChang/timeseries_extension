@@ -251,7 +251,6 @@ RETURNS VOID
 AS 'MODULE_PATHNAME', 'start_retention_worker'
 LANGUAGE C STRICT;
  
-SELECT start_retention_worker(); 
 
 -- ==========================================
 -- CONTINUOUS AGGREGATES
@@ -312,7 +311,6 @@ RETURNS VOID
 AS 'MODULE_PATHNAME', 'start_cagg_worker'
 LANGUAGE C STRICT;
  
-SELECT start_cagg_worker(); 
 
 -- ==========================================
 -- COMPRESSION SYSTEM
@@ -370,3 +368,14 @@ CREATE EVENT TRIGGER drop_bgw_when_drop_extension
 ON ddl_command_start
 WHEN TAG IN ('DROP EXTENSION')
 EXECUTE FUNCTION stop_background_workers();
+
+-- manually start all background workers
+CREATE FUNCTION start_background_workers()
+RETURNS VOID AS $$
+BEGIN
+    PERFORM start_retention_worker();
+    PERFORM start_cagg_worker();
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT start_background_workers();
