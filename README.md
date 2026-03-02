@@ -75,3 +75,5 @@ SELECT drop_hypertable('public.sensor_data');
 ```
 \df
 ```
+
+#### NOTE: You can test more extension features on `test` directory
