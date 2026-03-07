@@ -13,7 +13,7 @@
 #include <miscadmin.h>
 #include <funcapi.h>
 
-#include "metadata.h"
+#include "../../src/metadata.h"
 #include "retention.h"
 
 // postgresql use SIGTERM as the signal for background worker to stop
