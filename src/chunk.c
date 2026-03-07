@@ -254,15 +254,52 @@ chunk_drop_all_chunk(const char *schema_name, const char *table_name)
 
     initStringInfo(&query);
     appendStringInfo(&query,
-        "DROP TABLE IF EXISTS %s.%s CASCADE", schema_name, table_name);
+        "SELECT schema_name, table_name "
+        "FROM _timeseries_catalog.chunk "
+        "WHERE hypertable_id = ("
+        "   SELECT id FROM _timeseries_catalog.hypertable "
+        "   WHERE schema_name = '%s' AND table_name = '%s' )", 
+        schema_name, table_name);
     
-    ret = SPI_execute(query.data, false, 0);
-    if (ret != SPI_OK_UTILITY) {
-        ereport(WARNING,
-                errmsg("failed to drop chunk table %s.%s", schema_name, table_name));
+    ret = SPI_execute(query.data, true, 0);
+    if (ret != SPI_OK_SELECT) {
+        ereport(WARNING, errmsg("failed to fetch chunks for %s.%s", schema_name, table_name));
+        return;
     }
-    
-    elog(NOTICE, "Dropped chunk table %s.%s", schema_name, table_name);
+
+    // copy result to avoid overwrite SPI_tuptable
+    int num_chunks = SPI_processed;
+    if(num_chunks == 0){
+        elog(NOTICE, "No chunks to drop for %s.%s", schema_name, table_name);
+        return;
+    }
+
+    char **chunk_schemas = palloc(num_chunks * sizeof(char *));
+    char **chunk_tables  = palloc(num_chunks * sizeof(char *));
+    for(int i=0; i<num_chunks; i++){
+        bool isnull;
+        Datum datum;
+
+        datum = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
+        chunk_schemas[i] = pstrdup(TextDatumGetCString(datum));
+
+        datum = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &isnull);
+        chunk_tables[i] = pstrdup(TextDatumGetCString(datum));
+    }
+
+    // drop each chunk
+    for(int i=0; i<num_chunks; i++){
+        StringInfoData drop_query;
+        initStringInfo(&drop_query);
+        appendStringInfo(&drop_query,
+            "DROP TABLE IF EXISTS %s.%s CASCADE", chunk_schemas[i], chunk_tables[i]);
+
+        ret = SPI_execute(drop_query.data, false, 0);
+        if (ret != SPI_OK_UTILITY) {
+            ereport(WARNING, errmsg("failed to drop chunk table %s.%s", chunk_schemas[i], chunk_tables[i]));
+        }
+        elog(NOTICE, "Dropped chunk table %s.%s", chunk_schemas[i], chunk_tables[i]);
+    }
 }
 
 ChunkInfo*

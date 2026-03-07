@@ -188,7 +188,7 @@ drop_hypertable(PG_FUNCTION_ARGS)
 
     SPI_connect();
     if(!metadata_is_hypertable(schema_name, table_name)){
-        ereport(WARNING, (errmsg("\"%s.%s\" is not a hypertable", schema_name, table_name)));
+        ereport(ERROR, (errmsg("\"%s.%s\" is not a hypertable", schema_name, table_name)));
     }
     
     metadata_drop_hypertable(schema_name, table_name); // drop hypertable

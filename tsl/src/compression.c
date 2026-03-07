@@ -13,14 +13,13 @@
 #include "compression.h"
 
 
-CompressedChunkInfo* 
+void 
 compress_chunk_internal(int chunk_id)
 {
     StringInfoData query;
     char *schema_name, *table_name;
     int ret;
     bool isnull;
-    CompressedChunkInfo *info;
 
     // get chunk
     initStringInfo(&query);
@@ -94,7 +93,7 @@ compress_chunk_internal(int chunk_id)
     int64 row_count = DatumGetInt64(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
     if(row_count == 0){
         elog(NOTICE, "chunk %d is empty, skipping compression", chunk_id);
-        return NULL;
+        return;
     }
 
     // get uncompresed size
@@ -148,8 +147,6 @@ compress_chunk_internal(int chunk_id)
 
     SPI_execute(query.data, true, 1);
 
-    int64 compressed_bytes = DatumGetInt64(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
-    
     // update compress flag
     resetStringInfo(&query);
     appendStringInfo(&query,
@@ -170,23 +167,6 @@ compress_chunk_internal(int chunk_id)
     ret = SPI_execute(query.data, false, 0);
     if (ret != SPI_OK_UTILITY)
         ereport(WARNING, (errmsg("failed to drop original chunk table %s.%s", schema_name, table_name)));
-
-
-    info = (CompressedChunkInfo *) palloc(sizeof(CompressedChunkInfo));
-    info->chunk_id = chunk_id;
-    info->original_row_count = row_count;
-    info->uncompressed_bytes = uncompressed_bytes;
-    info->compressed_bytes = compressed_bytes;
-    info->compression_ratio  = (compressed_bytes > 0) ? ((double) uncompressed_bytes / (double) compressed_bytes) : 0.0;
-    info->is_compressed = true;
-
-    elog(NOTICE, "chunk %d compressed: %ld rows",
-        chunk_id, row_count,
-        uncompressed_bytes,
-        compressed_bytes,
-        info->compression_ratio);
-
-    return info;
 }   
 
 
@@ -201,7 +181,6 @@ compress_chunk(PG_FUNCTION_ARGS)
     int ret;
     int chunk_id;
     bool isnull;
-    CompressedChunkInfo *info;
 
     SPI_connect();
 
@@ -221,8 +200,8 @@ compress_chunk(PG_FUNCTION_ARGS)
 
     chunk_id = DatumGetInt32(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
 
-    // compress
-    info = compress_chunk_internal(chunk_id);
+    // compress chunk
+    compress_chunk_internal(chunk_id);
 
     SPI_finish();
     PG_RETURN_VOID();
