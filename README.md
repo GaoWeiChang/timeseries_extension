@@ -78,22 +78,26 @@ SELECT drop_hypertable('public.sensor_data');
 
 #### NOTE: You can test more extension features on `test` directory
 
-## Compile locally
+## Compile Locally
 ```
 cd project/
 sudo ./build.sh
 ```
 
-## Compile and deploy to RHEL-based server
+## Cross-platform Deployment
+Compile and deploy to RHEL-based server
+    - Build Environment: Ubuntu 24.04 LTS / Postgres 17
+    - Target Environment: RHEL 9.7 / Postgres 16
+
 - Local machine (Ubuntu)
 ```
 sudo ./build_package.sh
 ```
-after compiled, send `timeseries-extension.tar.gz` to target machine (RHEL)
+after compiled, send `timeseries-extension.tar.gz` package to target machine (RHEL)
 
 - Target machine (RHEL)
 ```
-# go to compressed extension file location and extract package
+# go to package location and extract package
 tar -xzf timeseries-extension.tar.gz
 
 # install extension
