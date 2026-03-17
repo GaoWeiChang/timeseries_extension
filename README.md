@@ -92,6 +92,8 @@ sudo ./build.sh
 ```
 sudo ./build_package.sh
 ```
+<img width="515" height="78" alt="image" src="https://github.com/user-attachments/assets/8f93c9a6-3ccb-42fa-95ad-33e8e897d9d7" />
+
 after compiled, send `timeseries-extension.tar.gz` package to target machine (RHEL)
 
 ### Target machine (RHEL)
