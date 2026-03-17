@@ -85,17 +85,16 @@ sudo ./build.sh
 ```
 
 ## Cross-platform Deployment
-Compile and deploy to RHEL-based server
-    - Build Environment: Ubuntu 24.04 LTS / Postgres 17
-    - Target Environment: RHEL 9.7 / Postgres 16
+- Local Environment: Ubuntu 24.04 LTS / Postgres 17
+- Target Environment: RHEL 9.7 / Postgres 16
 
-- Local machine (Ubuntu)
+### Local machine (Ubuntu)
 ```
 sudo ./build_package.sh
 ```
 after compiled, send `timeseries-extension.tar.gz` package to target machine (RHEL)
 
-- Target machine (RHEL)
+### Target machine (RHEL)
 ```
 # go to package location and extract package
 tar -xzf timeseries-extension.tar.gz
