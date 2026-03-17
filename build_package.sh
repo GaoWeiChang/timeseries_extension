@@ -37,8 +37,8 @@ docker rm "${CONTAINER_ID}"
 # Compress into tar.gz
 echo ""
 echo "[3/3] Creating tar.gz package..."
-cp "${SCRIPT_DIR}/scripts/install.sh"   "${SCRIPT_DIR}/artifacts/"
-cp "${SCRIPT_DIR}/scripts/uninstall.sh" "${SCRIPT_DIR}/artifacts/"
+cp "${SCRIPT_DIR}/install.sh"   "${SCRIPT_DIR}/artifacts/"
+cp "${SCRIPT_DIR}/uninstall.sh" "${SCRIPT_DIR}/artifacts/"
 chmod +x "${SCRIPT_DIR}/artifacts/install.sh" \
         "${SCRIPT_DIR}/artifacts/uninstall.sh"
 
