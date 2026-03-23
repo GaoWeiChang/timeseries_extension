@@ -12,9 +12,9 @@ A lightweight PostgreSQL extension that converts regular tables into **hypertabl
 
 ```
 hypertable
-├── chunk1  [2024-01-01 to 2024-01-02)
-├── chunk2  [2024-01-02 to 2024-01-03)
-└── chunk3  [2024-01-03 to 2024-01-04)
+├── chunk1  [2025-01-01 to 2025-01-02)
+├── chunk2  [2025-01-02 to 2025-01-03)
+└── chunk3  [2025-01-03 to 2025-01-04)
 ```
 
 ## Installation & Build
@@ -25,7 +25,7 @@ sudo apt-get install -y \
     build-essential \
     cmake \
     git \
-    postgresql-server-dev-16 \
+    postgresql-server-dev-17 \
     libssl-dev \
     libkrb5-dev
 ```
@@ -74,6 +74,85 @@ SELECT drop_hypertable('public.sensor_data');
 ### Show all functions
 ```
 \df
+```
+
+## Advanced Features
+### Background workers
+- check background worker inside database
+```
+SELECT pid, application_name, state, query
+FROM pg_stat_activity
+WHERE datname = 'test_db';
+```
+- enable/disable background workers
+```
+SELECT start_background_workers();
+
+SELECT stop_background_workers();
+```
+
+### Retention
+- Retention will automatically delete chunks when their duration exceeds the retention policy we set.
+```
+# set retention policy (automatically delete the chunk that older than 365 days)
+SELECT set_retention_policy('sensor_data', INTERVAL '365 days');
+```
+
+### Continuous Aggregate
+- Continuous aggregation pre-calculates and stores the query results, so when you need to query, you can directly retrieve the results without recalculating, making the query speed very fast.
+
+- create continuous daily aggreagate policy
+```
+SELECT create_continuous_aggregate(
+    'sensor_daily',       -- new daily table name
+    'sensor_readings',    -- original table name
+    'SELECT               -- aggreagate query
+        time_bucket(''1 day'', time) AS bucket,
+        AVG(temperature) AS avg_temp,
+        MIN(temperature) AS min_temp,
+        MAX(temperature) AS max_temp
+     FROM sensor_readings
+     GROUP BY bucket
+     ORDER BY bucket',
+    INTERVAL '1 day',      -- Each row stores a query result representing a one-day time interval (the size of the time_bucket)
+    INTERVAL '1 hour'      -- auto refresh every 1 hour
+);
+```
+
+- manual refresh
+```
+SELECT refresh_continuous_aggregate(
+    'sensor_daily',
+    '2026-02-12 00:00:00+00'::timestamptz,    
+    '2026-02-16 00:00:00+00'::timestamptz
+);
+```
+
+### Chunk Compression
+- check the original chunk size
+```
+SELECT
+    table_name,
+    pg_size_pretty(pg_total_relation_size(
+        quote_ident(schema_name) || '.' || quote_ident(table_name)
+    )) AS size,
+    (SELECT COUNT(*) FROM public._hyper_1_1_chunk) AS rows
+FROM _timeseries_catalog.chunk
+WHERE id = 1
+ORDER BY table_name;
+```
+
+- compress specific chunk
+```
+SELECT compress_chunk('_hyper_1_1_chunk');
+```
+
+- check the compressed size
+```
+SELECT
+    pg_size_pretty(SUM(pg_column_size(column_data)::bigint)) AS compressed_size
+FROM _timeseries_catalog.compressed_chunk
+WHERE chunk_id = 1;
 ```
 
 #### NOTE: You can test more extension features on `test` directory
