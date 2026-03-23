@@ -78,6 +78,8 @@ SELECT drop_hypertable('public.sensor_data');
 
 ## Advanced Features
 ### Background workers
+- Background worker is a component that handles these tasks behind the scenes. It does not require manual triggering; it executes itself in the background behind the database.
+
 - check background worker inside database
 ```
 SELECT pid, application_name, state, query
