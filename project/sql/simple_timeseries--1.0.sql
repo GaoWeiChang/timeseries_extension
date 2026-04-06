@@ -243,14 +243,7 @@ LANGUAGE C STRICT;
 CREATE FUNCTION apply_retention_policies()
 RETURNS VOID
 AS 'MODULE_PATHNAME', 'apply_retention_policies'
-LANGUAGE C STRICT;
-
--- start retention background worker for current database
-CREATE FUNCTION start_retention_worker()
-RETURNS VOID
-AS 'MODULE_PATHNAME', 'start_retention_worker'
-LANGUAGE C STRICT;
- 
+LANGUAGE C STRICT; 
 
 -- ==========================================
 -- CONTINUOUS AGGREGATES
@@ -305,12 +298,6 @@ CREATE FUNCTION drop_continuous_aggregate(
 AS 'MODULE_PATHNAME', 'drop_continuous_aggregate'
 LANGUAGE C STRICT;
 
--- start continuous aggregate worker for current database
-CREATE FUNCTION start_cagg_worker()
-RETURNS VOID
-AS 'MODULE_PATHNAME', 'start_cagg_worker'
-LANGUAGE C STRICT;
- 
 
 -- ==========================================
 -- COMPRESSION SYSTEM
@@ -348,34 +335,33 @@ WHERE chunk_id = 1
 ORDER BY id;
 
 
+
 -- ==========================================
--- BACKGROUND WORKER
+-- Workers table
 -- ==========================================
 
--- stop background workers
-CREATE FUNCTION stop_background_workers(
-) RETURNS event_trigger AS $$
-BEGIN
-    PERFORM pg_terminate_backend(pid)
-    FROM pg_stat_activity
-    WHERE (application_name IN ('retention worker', 'continuous aggregate worker'))
-        AND (datname = current_database());
-END;
-$$ LANGUAGE plpgsql;
+-- worker table on postgres database via dblink
+SELECT dblink_exec(
+    'dbname=postgres',
+    $SQL$
+        CREATE TABLE IF NOT EXISTS public._timeseries_workers (
+            db_oid   OID  PRIMARY KEY,
+            db_name  TEXT NOT NULL,
+            registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    $SQL$
+);
 
--- event trigger drop bgw when called DROP EXTENSION
-CREATE EVENT TRIGGER drop_bgw_when_drop_extension
-ON ddl_command_start
-WHEN TAG IN ('DROP EXTENSION')
-EXECUTE FUNCTION stop_background_workers();
-
--- manually start all background workers
-CREATE FUNCTION start_background_workers()
-RETURNS VOID AS $$
-BEGIN
-    PERFORM start_retention_worker();
-    PERFORM start_cagg_worker();
-END;
-$$ LANGUAGE plpgsql;
-
-SELECT start_background_workers();
+-- register worker in _timeseries_workers
+SELECT dblink_exec(
+    'dbname=postgres',
+    format(
+        $SQL$
+            INSERT INTO public._timeseries_workers (db_oid, db_name)
+            VALUES (%s, %L)
+            ON CONFLICT (db_oid) DO NOTHING
+        $SQL$,
+        (SELECT oid FROM pg_database WHERE datname = current_database()),
+        current_database()
+    )
+);
