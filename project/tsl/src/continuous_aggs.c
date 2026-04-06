@@ -242,7 +242,9 @@ cagg_worker_main(Datum main_arg)
         
         ResetLatch(MyLatch);
 
-        if(got_sigterm) 
+        CHECK_FOR_INTERRUPTS();
+
+        if(got_sigterm)
             break;
 
         if(ret & WL_TIMEOUT){
@@ -395,32 +397,5 @@ drop_continuous_aggregate(PG_FUNCTION_ARGS)
     elog(NOTICE, "continuous aggregate \"%s\" dropped", view_name);
 
     SPI_finish();
-    PG_RETURN_VOID();
-}
-
-PG_FUNCTION_INFO_V1(start_cagg_worker);
-Datum 
-start_cagg_worker(PG_FUNCTION_ARGS)
-{
-    if(is_cagg_bgw_exist()){ 
-        elog(NOTICE, "continuous aggregate worker already running, skipping");
-        PG_RETURN_VOID();
-    }
-
-    BackgroundWorker worker;
-    BackgroundWorkerHandle *handle;
-
-    MemSet(&worker, 0, sizeof(worker));
-    strlcpy(worker.bgw_name, "continuous aggregate worker", BGW_MAXLEN);
-    strlcpy(worker.bgw_library_name, "simple_timeseries", BGW_MAXLEN);
-    strlcpy(worker.bgw_function_name, "cagg_worker_main", BGW_MAXLEN);
-
-    worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
-    worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
-    worker.bgw_restart_time = 10;
-    worker.bgw_main_arg = ObjectIdGetDatum(MyDatabaseId);
-
-    RegisterDynamicBackgroundWorker(&worker, &handle);
-
     PG_RETURN_VOID();
 }
