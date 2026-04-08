@@ -31,6 +31,19 @@ sudo apt-get install -y \
 ```
 
 ### Build and use extension
+
+- Add extension name in `postgres.conf`
+```
+# ubuntu
+vim  /etc/postgresql/17/main/postgresql.conf
+
+# redhat
+vim /var/lib/pgsql/17/data/postgresql.conf
+
+shared_preload_libraries = 'simple_timeseries'
+```
+
+- Setup extension
 ```
 # change to root user
 su
